@@ -5,7 +5,6 @@
 {-# LANGUAGE TemplateHaskell     #-}
 module Language.CuminToSalt.TypeChecker where
 
-import           Control.Lens
 import           Data.Maybe                 (fromJust)
 import           Debug.Trace.LocationTH
 import           FunLogic.Core.AST
@@ -57,11 +56,6 @@ tyCheckAlt
   -> (forall w. VarEnv w -> f w -> Type)
   -> Alt f v
   -> Type
-tyCheckAlt ty varEnv te = \case
-  AVarPat v s -> reduceScope te (const $ VarInfo v ty) varEnv s
-  AConPat c conArgs s -> case ty of
-    TVar _ -> error "tvar unexpected"
-    TCon _ tyArgs ->
-      let (adt, conDecl) = lookupConstructor varEnv c
-          types = fromJust $ instantiateConDecl (adt^.adtTyArgs) tyArgs conDecl
-      in reduceScope te (\i -> VarInfo (conArgs !! i) (types !! i)) varEnv s
+tyCheckAlt ty varEnv te = enterAlt ty varEnv
+  (\b -> reduceScope te (const b) varEnv) -- variable pattern
+  (\_ bs -> reduceScope te (bs !!) varEnv) -- constructor pattern

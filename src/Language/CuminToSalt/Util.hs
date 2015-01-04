@@ -13,6 +13,7 @@ import qualified Data.Map                   as M
 import           Data.Maybe                 (fromJust)
 import           Debug.Trace.LocationTH
 import           FunLogic.Core.AST
+import qualified FunLogic.Core.Pretty       as FP
 import qualified Language.CuMin.AST         as C
 import           Language.CuminToSalt.Types
 import qualified Language.SaLT.AST          as S
@@ -92,17 +93,6 @@ reduceScope
   -> t
 reduceScope t b vars s = t (combineVarEnvs b vars) (fromScope s)
 
-reduceScopeM
-  :: (forall w. VarEnv w -> SExp w -> m S.Exp)
-  -> (b -> VarInfo)
-  -> VarEnv v
-  -> Scope b SExp v
-  -> m S.Exp
-reduceScopeM t b (VarEnv v g c) s = t (VarEnv k g c) $ fromScope s
-  where
-  k (B bb) = b bb
-  k (F vv) = v vv
-
 walkScope
   :: forall b v f g. (Monad f, Monad g, Show v, Show b)
   => (forall w. Show w => VarEnv w -> f w -> g w) -- the function on expressions
@@ -118,3 +108,20 @@ cuminToSaltOp :: C.PrimOp -> S.PrimOp
 cuminToSaltOp = \case
   C.PrimAdd -> S.PrimAdd
   C.PrimEq -> S.PrimEq
+
+enterAlt
+  :: Type
+  -> VarEnv v
+  -> (VarInfo -> Scope () f v -> a)
+  -> (VarName -> [VarInfo] -> Scope Int f v -> a)
+  -> Alt f v
+  -> a
+enterAlt ty varEnv varPat conPat = \case
+  AVarPat v s -> varPat (VarInfo v ty) s
+  AConPat c conArgs s -> case ty of
+   TVar _ -> error $
+     "Expected constructor type " ++ c ++ " but got expression of type " ++ show (FP.prettyType ty)
+   TCon _ tyArgs ->
+     let (adt, conDecl) = lookupConstructor varEnv c
+         types = $checkTrace (show (FP.prettyType ty) ++ show adt ++ show conDecl) $ fromJust $ instantiateConDecl (adt^.adtTyArgs) tyArgs conDecl
+     in conPat c (zipWith VarInfo conArgs types) s

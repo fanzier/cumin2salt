@@ -30,23 +30,7 @@ cuminToSalt
   . cModToSMod
   . cuminModuleToInternal
 
-cuminModuleToInternal :: C.Module -> CModule VarName
-cuminModuleToInternal m = CModule
-  { _cModADTs = m^.modADTs
-  , _cModBinds = cuminBindingToInternal <$> m^.modBinds
-  , _cModName = m^.modName
-  }
-
-cuminBindingToInternal :: C.Binding -> CBinding VarName
-cuminBindingToInternal b = CBinding
-  { _cBindName = b^.C.bindingName
-  , _cBindType = b^.C.bindingType
-  , _cBindArgs = b^.C.bindingArgs
-  , _cBindExpr = boundExp
-  }
-  where
-  boundExp = assert' isClosed $
-    abstract (`elemIndex` (b^.C.bindingArgs)) $ cuminExpToInternal $ b^.C.bindingExpr
+-- * CuMin -> Internal CuMin Representation
 
 cuminExpToInternal :: C.Exp -> CExp VarName
 cuminExpToInternal = \case
@@ -65,6 +49,26 @@ cuminAltToInternal :: C.Alt -> Alt CExp VarName
 cuminAltToInternal (C.Alt p e) = case p of
   PVar v -> AVarPat v (abstract1 v (cuminExpToInternal e))
   PCon c vs -> AConPat c vs (abstract (`elemIndex` vs) (cuminExpToInternal e))
+
+cuminBindingToInternal :: C.Binding -> CBinding VarName
+cuminBindingToInternal b = CBinding
+  { _cBindName = b^.C.bindingName
+  , _cBindType = b^.C.bindingType
+  , _cBindArgs = b^.C.bindingArgs
+  , _cBindExpr = boundExp
+  }
+  where
+  boundExp = assert' isClosed $
+    abstract (`elemIndex` (b^.C.bindingArgs)) $ cuminExpToInternal $ b^.C.bindingExpr
+
+cuminModuleToInternal :: C.Module -> CModule VarName
+cuminModuleToInternal m = CModule
+  { _cModADTs = m^.modADTs
+  , _cModBinds = cuminBindingToInternal <$> m^.modBinds
+  , _cModName = m^.modName
+  }
+
+-- * Internal CuMin Representation -> Internal SaLT Representation
 
 cExpToSExp :: Show v => VarEnv v -> CExp v -> SExp v
 cExpToSExp varEnv = \case
@@ -124,14 +128,14 @@ cAltToSAlt
   -> (forall w. Show w => VarEnv w -> f w -> g w)
   -> Alt f v
   -> Alt g v
-cAltToSAlt ty varEnv te = \case
-  AVarPat _ _ -> error "todo" -- AVarPat v <$> walkScope te (const $ return ty) varEnv s
-  AConPat c vs s -> case ty of
-    TVar _ -> error "tvar unexpected"
-    TCon _ tyArgs -> AConPat c vs $
-      let (adt, conDecl) = lookupConstructor varEnv c
-          types = fromJust $ instantiateConDecl (adt^.adtTyArgs) tyArgs conDecl
-      in walkScope te (\i -> VarInfo (vs !! i) (types !! i)) varEnv s
+cAltToSAlt ty varEnv te =
+  enterAlt ty varEnv
+    (\b@(VarInfo v _) x ->
+      AVarPat v $ walkScope te (const b) varEnv x
+    )
+    (\c bs x -> let vs = map _vName bs in
+      AConPat c vs $ walkScope te (bs !!) varEnv x
+    )
 
 cBindToSBind :: VarEnv VarName -> CBinding VarName -> SBinding VarName
 cBindToSBind varEnv b = SBinding
@@ -173,6 +177,8 @@ cModToSMod m = SModule
     }
   transformTyDecl (TyDecl q c ty) = TyDecl q c (cTypeToSType ty)
 
+-- * Internal SaLT Representation -> SaLT
+
 internalToSalt :: VarEnv v -> SExp v -> Renamer S.Exp
 internalToSalt varEnv = \case
   SEVar v -> return . S.EVar $ _vName $ _localVar varEnv v
@@ -180,7 +186,7 @@ internalToSalt varEnv = \case
   SELam v ty x -> withLocal v $ do
       Just j <- resolve v
       let w = makeVar v j
-      S.ELam w ty <$> reduceScopeM internalToSalt (const $ VarInfo w ty) varEnv x
+      S.ELam w ty <$> reduceScope internalToSalt (const $ VarInfo w ty) varEnv x
   SESetBind x v y -> S.EPrim S.PrimBind <$> do
     x' <- internalToSalt varEnv x
     let TSet ty = tyCheckSExp varEnv x
@@ -200,22 +206,23 @@ internalToSalt varEnv = \case
   SEUnknown ty -> return $ S.EUnknown ty
 
 altToSalt :: VarEnv v -> Type -> Alt SExp v -> Renamer S.Alt
-altToSalt varEnv ty = \case
-  AVarPat v x ->
-    withLocal v $ do
-      Just i <- resolve v
-      let w = makeVar v i
-      e <- reduceScopeM internalToSalt (const $ VarInfo w ty) varEnv x
+altToSalt varEnv ty =
+  enterAlt ty varEnv
+    -- Variable pattern:
+    (\(VarInfo v vTy) x -> withLocal v $ do
+      Just w <- resolveName v
+      e <- reduceScope internalToSalt (const $ VarInfo w vTy) varEnv x
       return $ S.Alt (PVar w) e
-  AConPat c vs x -> withLocals vs $ do
-    ws <- traverse ($check . fmap fromJust . resolveName) vs
-    let types = case ty of
-              TVar _ -> error $ "Unexpected type of scrutinee: " ++ show (SP.prettyType ty)
-              TCon _ tyArgs ->
-                let (adt, conDecl) = lookupConstructor varEnv c
-                in fromJust $ instantiateConDecl (adt^.adtTyArgs) tyArgs conDecl
-    e <- reduceScopeM internalToSalt (\i -> VarInfo (ws !! i) (types !! i)) varEnv x
-    return $ S.Alt (PCon c ws) e
+    )
+    -- Constructor pattern:
+    (\c bs x ->
+      let vs = map _vName bs
+          tys = map _vType bs
+      in withLocals vs $ do
+        ws <- traverse ($check . fmap fromJust . resolveName) vs
+        e <- reduceScope internalToSalt (\i -> VarInfo (ws !! i) (tys !! i)) varEnv x
+        return $ S.Alt (PCon c ws) e
+    )
 
 internalToSaltBinding :: VarEnv VarName -> SBinding VarName -> Renamer S.Binding
 internalToSaltBinding varEnv b = fillBinding <$> internalToSalt varEnv (b^.sBindExp)
