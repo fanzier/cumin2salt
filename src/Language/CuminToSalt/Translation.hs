@@ -94,7 +94,7 @@ cExpToSExp varEnv = \case
   CECase e alts ->
     let
       e' = cExpToSExp varEnv e
-      ty = tyCheckSExp varEnv e'
+      TSet ty = tyCheckSExp varEnv e'
       alts' = map (cAltToSAlt ty varEnv cExpToSExp) alts
     in SESetBind e' "scrutinee" (Scope $ SECase (return (B ())) (map (fmap (F . return)) alts'))
   where
