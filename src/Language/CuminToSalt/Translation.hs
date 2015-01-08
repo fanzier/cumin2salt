@@ -9,24 +9,26 @@ module Language.CuminToSalt.Translation where
 import           Bound
 import           Control.Applicative
 import           Control.Lens
-import           Data.Foldable                    (traverse_)
-import           Data.List                        (elemIndex)
-import qualified Data.Map                         as M
-import           Data.Maybe                       (fromJust)
+import           Data.Foldable                      (traverse_)
+import           Data.List                          (elemIndex)
+import qualified Data.Map                           as M
+import           Data.Maybe                         (fromJust)
 import           Debug.Trace.LocationTH
-import           FunLogic.Core.AST                as F
-import qualified Language.CuMin.AST               as C
+import           FunLogic.Core.AST                  as F
+import qualified Language.CuMin.AST                 as C
+import           Language.CuminToSalt.Optimizations (simplifyModule)
 import           Language.CuminToSalt.Renamer
 import           Language.CuminToSalt.TypeChecker
 import           Language.CuminToSalt.Types
 import           Language.CuminToSalt.Util
-import qualified Language.SaLT.AST                as S
-import qualified Language.SaLT.Pretty             as SP
+import qualified Language.SaLT.AST                  as S
+import qualified Language.SaLT.Pretty               as SP
 
 cuminToSalt :: C.Module -> S.Module
 cuminToSalt
   = evalRenamer
   . internalToSaltModule
+  . simplifyModule
   . cModToSMod
   . cuminModuleToInternal
 

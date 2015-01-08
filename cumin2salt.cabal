@@ -17,6 +17,7 @@ cabal-version:       >=1.10
 
 library
   exposed-modules:   Language.CuminToSalt
+                   , Language.CuminToSalt.Optimizations
                    , Language.CuminToSalt.Renamer
                    , Language.CuminToSalt.Translation
                    , Language.CuminToSalt.Types
