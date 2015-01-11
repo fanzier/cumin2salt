@@ -7,7 +7,6 @@ module Language.CuminToSalt.Optimizations where
 import           Bound
 import           Control.Applicative
 import           Control.Lens
-import qualified Data.Map                         as M
 import           FunLogic.Core.AST                as F
 import           Language.CuminToSalt.TypeChecker
 import           Language.CuminToSalt.Types
@@ -37,13 +36,9 @@ simplifyModule :: SModule VarName -> SModule VarName
 simplifyModule m = m & sModBinds %~ fmap (simplifyBinding initialVarEnv)
   where
   initialVarEnv :: VarEnv VarName
-  initialVarEnv = VarEnv
-    { _localVar = \v -> error $ "No free variable expected but found: " ++ show v
-    , _globalTypes = fmap (view sBindType) $ m^.sModBinds
-    , _constructorTypes = M.fromList $ M.toList (m^.sModADTs)
-        >>= \(_, a) -> a^.adtConstr
-        >>= \c@(ConDecl cName _) -> return (cName, (a, c))
-    }
+  initialVarEnv = makeInitialVarEnv
+    (fmap (view sBindType) $ m^.sModBinds)
+    (m^.sModADTs)
 
 -- * Transform subexpressions
 
@@ -53,10 +48,10 @@ transformSubExpressions
   -> VarEnv v -> SExp v -> SExp v
 transformSubExpressions t varEnv = \case
   SELam v ty x -> SELam v ty $
-    walkScope t (const $ VarInfo v ty) varEnv x
+    transformScope t (const $ VarInfo v ty) varEnv x
   SESetBind x v y -> let TSet ty = tyCheckSExp varEnv x in
     SESetBind (t varEnv x) v
-    (walkScope t (const $ VarInfo v ty) varEnv y)
+    (transformScope t (const $ VarInfo v ty) varEnv y)
   SEApp x y -> SEApp (t varEnv x) (t varEnv y)
   SEPrim oper es -> SEPrim oper (map (t varEnv) es)
   SECase x alts -> let ty = tyCheckSExp varEnv x in
@@ -64,13 +59,3 @@ transformSubExpressions t varEnv = \case
       map (transformAlt t ty varEnv) alts
   SESet s -> SESet (t varEnv s)
   e -> e
-
-transformAlt
-  :: Show v
-  => (forall w. Show w => VarEnv w -> SExp w -> SExp w)
-  -> Type -> VarEnv v -> Alt SExp v -> Alt SExp v
-transformAlt t ty varEnv = enterAlt ty varEnv
-  (\b@(VarInfo v _) s -> AVarPat v $ walkScope t (const b) varEnv s)
-  (\c bs s ->  let vs = map _vName bs in
-   AConPat c vs $ walkScope t (bs !!) varEnv s
-  )

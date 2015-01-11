@@ -83,10 +83,10 @@ cExpToSExp varEnv = \case
     let
       x' = cExpToSExp varEnv x
       TSet ty = tyCheckSExp varEnv x'
-      s' = walkScope cExpToSExp (const $ VarInfo v ty) varEnv s
+      s' = transformScope cExpToSExp (const $ VarInfo v ty) varEnv s
     in SESetBind x' v s'
   CELetFree v ty s ->
-    let s' = walkScope cExpToSExp (const $ VarInfo v ty) varEnv s
+    let s' = transformScope cExpToSExp (const $ VarInfo v ty) varEnv s
     in SESetBind (SEUnknown ty) v s'
   CEFailed ty -> SESet (SEFailed ty)
   CEFun v tys -> SEFun v tys
@@ -105,7 +105,7 @@ cExpToSExp varEnv = \case
     let
       e' = cExpToSExp varEnv e
       TSet ty = tyCheckSExp varEnv e'
-      alts' = map (cAltToSAlt ty varEnv cExpToSExp) alts
+      alts' = map (transformAlt cExpToSExp ty varEnv) alts
     in SESetBind e' "scrutinee" (Scope $ SECase (return (B ())) (map (fmap (F . return)) alts'))
   where
   makeConstructorLambda :: Show v => VarName -> [Type] -> SExp v
@@ -123,25 +123,9 @@ cExpToSExp varEnv = \case
   makePrimExp exps oper = go [] exps
     where
     go :: Show v => [SExp v] -> [SExp v] -> SExp v
-    go fs es = case es of
+    go fs = \case
       [] -> SESet $ SEPrim oper (reverse fs)
       x:xs -> SESetBind x "primOpArg" (toScope $ go (return (B ()) : map (fmap F) fs) (map (fmap F) xs))
-
-cAltToSAlt
-  :: (Monad f, Monad g, Show v)
-  => Type
-  -> VarEnv v
-  -> (forall w. Show w => VarEnv w -> f w -> g w)
-  -> Alt f v
-  -> Alt g v
-cAltToSAlt ty varEnv te =
-  enterAlt ty varEnv
-    (\b@(VarInfo v _) x ->
-      AVarPat v $ walkScope te (const b) varEnv x
-    )
-    (\c bs x -> let vs = map _vName bs in
-      AConPat c vs $ walkScope te (bs !!) varEnv x
-    )
 
 cBindToSBind :: VarEnv VarName -> CBinding VarName -> SBinding VarName
 cBindToSBind varEnv b = SBinding
@@ -160,7 +144,7 @@ cBindToSBind varEnv b = SBinding
   makeLambda [] vars s = cExpToSExp vars ($check $ fromJust $ extractFromConstantScope s)
   makeLambda ((i, v, ty):tys) vars s
     = SESet . SELam v ty $
-      walkScope
+      transformScope
         (makeLambda tys)
         (const $ VarInfo v ty)
         vars
@@ -174,13 +158,9 @@ cModToSMod m = SModule
   }
   where
   initialVarEnv :: VarEnv VarName
-  initialVarEnv = VarEnv
-    { _localVar = \v ->  error $ "No free variable expected but found: " ++ show v
-    , _globalTypes = fmap (transformTyDecl . view cBindType) $ m^.cModBinds
-    , _constructorTypes = M.fromList $ M.toList (m^.cModADTs)
-        >>= \(_, a) -> a^.adtConstr
-        >>= \c@(ConDecl cName _) -> return (cName, (a, c))
-    }
+  initialVarEnv = makeInitialVarEnv
+    (fmap (transformTyDecl . view cBindType) $ m^.cModBinds)
+    (m^.cModADTs)
   transformTyDecl (TyDecl q c ty) = TyDecl q c (cTypeToSType ty)
 
 -- * Internal SaLT Representation -> SaLT
@@ -251,10 +231,6 @@ internalToSaltModule m = do
     , S._modName = m^.sModName
     }
   initialVarEnv :: VarEnv VarName
-  initialVarEnv = VarEnv
-    { _localVar = \v -> error $ "No free variable expected but found: " ++ show v
-    , _globalTypes = fmap (view sBindType) $ m^.sModBinds
-    , _constructorTypes = M.fromList $ M.toList (m^.sModADTs)
-        >>= \(_, a) -> a^.adtConstr
-        >>= \c@(ConDecl cName _) -> return (cName, (a, c))
-    }
+  initialVarEnv = makeInitialVarEnv
+    (fmap (view sBindType) $ m^.sModBinds)
+    (m^.sModADTs)

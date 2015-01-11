@@ -25,7 +25,7 @@ tyCheckCExp varEnv = \case
     C.PrimEq -> TCon "Bool" []
     C.PrimAdd -> TNat
   CECon c tys -> $check . fromJust . instantiateTyDecl tys . conDeclToTyDecl $ lookupConstructor varEnv c
-  CECase e alts -> let ty = tyCheckCExp varEnv e in tyCheckAlt ty varEnv tyCheckCExp (head alts)
+  CECase e alts -> let ty = tyCheckCExp varEnv e in reduceAlt tyCheckCExp ty varEnv (head alts)
 
 tyCheckSExp :: VarEnv v -> SExp v -> Type
 tyCheckSExp varEnv = \case
@@ -45,17 +45,6 @@ tyCheckSExp varEnv = \case
     C.PrimAdd -> TNat
   SECon c tys -> $check . fromJust . instantiateTyDecl tys . conDeclToTyDecl $ lookupConstructor varEnv c
   SESet x -> TSet $ tyCheckSExp varEnv x
-  SECase e alts -> let ty = tyCheckSExp varEnv e in tyCheckAlt ty varEnv tyCheckSExp (head alts)
+  SECase e alts -> let ty = tyCheckSExp varEnv e in reduceAlt tyCheckSExp ty varEnv (head alts)
   SEFailed ty -> ty
   SEUnknown ty -> TSet ty
-
-tyCheckAlt
-  :: (Monad f)
-  => Type
-  -> VarEnv v
-  -> (forall w. VarEnv w -> f w -> Type)
-  -> Alt f v
-  -> Type
-tyCheckAlt ty varEnv te = enterAlt ty varEnv
-  (\b -> reduceScope te (const b) varEnv) -- variable pattern
-  (\_ bs -> reduceScope te (bs !!) varEnv) -- constructor pattern

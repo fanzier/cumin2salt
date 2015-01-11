@@ -35,6 +35,15 @@ lookupGlobal varEnv v = $checkTrace v . fromJust $ ty1 `mplus` (conDeclToTyDecl 
   ty1 = varEnv^.globalTypes.at v
   conDecl = varEnv^.constructorTypes.at v
 
+makeInitialVarEnv :: M.Map VarName TyDecl -> M.Map VarName ADT -> VarEnv VarName
+makeInitialVarEnv globals adts = VarEnv
+  { _localVar = \v ->  error $ "No free variable expected but found: " ++ show v
+  , _globalTypes = globals
+  , _constructorTypes = M.fromList $ M.toList adts
+      >>= \(_, a) -> a^.adtConstr
+      >>= \c@(ConDecl cName _) -> return (cName, (a, c))
+  }
+
 -- * Handling types
 
 instantiateTyDecl :: [Type] -> TyDecl -> Maybe Type
@@ -93,21 +102,16 @@ reduceScope
   -> t
 reduceScope t b vars s = t (combineVarEnvs b vars) (fromScope s)
 
-walkScope
+transformScope
   :: forall b v f g. (Monad f, Monad g, Show v, Show b)
   => (forall w. Show w => VarEnv w -> f w -> g w) -- the function on expressions
   -> (b -> VarInfo) -- what to do with bound variables
   -> VarEnv v -- what to do with free variables
   -> Scope b f v -- the scope to be walked along
   -> Scope b g v
-walkScope t b vars s = toScope $ t (combineVarEnvs b vars) (fromScope s)
+transformScope t b vars s = toScope $ t (combineVarEnvs b vars) (fromScope s)
 
--- * Miscellaneous
-
-cuminToSaltOp :: C.PrimOp -> S.PrimOp
-cuminToSaltOp = \case
-  C.PrimAdd -> S.PrimAdd
-  C.PrimEq -> S.PrimEq
+-- * Handling case alternatives
 
 enterAlt
   :: Type
@@ -125,3 +129,28 @@ enterAlt ty varEnv varPat conPat = \case
      let (adt, conDecl) = lookupConstructor varEnv c
          types = $checkTrace (show (FP.prettyType ty) ++ show adt ++ show conDecl) $ fromJust $ instantiateConDecl (adt^.adtTyArgs) tyArgs conDecl
      in conPat c (zipWith VarInfo conArgs types) s
+
+transformAlt
+  :: (Show v, Monad f, Monad g)
+  => (forall w. Show w => VarEnv w -> f w -> g w)
+  -> Type -> VarEnv v -> Alt f v -> Alt g v
+transformAlt t ty varEnv = enterAlt ty varEnv
+  (\b@(VarInfo v _) s -> AVarPat v $ transformScope t (const b) varEnv s)
+  (\c bs s -> let vs = map _vName bs in
+   AConPat c vs $ transformScope t (bs !!) varEnv s
+  )
+
+reduceAlt
+  :: (Monad f)
+  => (forall w. VarEnv w -> f w -> t)
+  -> Type -> VarEnv v -> Alt f v -> t
+reduceAlt t ty varEnv = enterAlt ty varEnv
+  (\b s -> reduceScope t (const b) varEnv s)
+  (\_ bs s -> reduceScope t (bs !!) varEnv s)
+
+-- * Miscellaneous
+
+cuminToSaltOp :: C.PrimOp -> S.PrimOp
+cuminToSaltOp = \case
+  C.PrimAdd -> S.PrimAdd
+  C.PrimEq -> S.PrimEq

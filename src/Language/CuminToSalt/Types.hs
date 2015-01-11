@@ -8,7 +8,6 @@ module Language.CuminToSalt.Types where
 
 import           Bound
 import           Control.Applicative
-import           Control.Exception
 import           Control.Lens
 import           Control.Monad
 import           Data.Foldable
