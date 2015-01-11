@@ -13,6 +13,7 @@ import           Data.Foldable                      (traverse_)
 import           Data.List                          (elemIndex)
 import qualified Data.Map                           as M
 import           Data.Maybe                         (fromJust)
+import qualified Data.Set                           as Set
 import           Debug.Trace.LocationTH
 import           FunLogic.Core.AST                  as F
 import qualified Language.CuMin.AST                 as C
@@ -34,34 +35,37 @@ cuminToSalt
 
 -- * CuMin -> Internal CuMin Representation
 
-cuminExpToInternal :: C.Exp -> CExp VarName
-cuminExpToInternal = \case
-  C.EVar v -> CEVar v
-  C.ELet v x y -> CELet v (cuminExpToInternal x) (abstract1 v (cuminExpToInternal y))
-  C.ELetFree v ty e -> CELetFree v ty (abstract1 v (cuminExpToInternal e))
+cuminExpToInternal :: Set.Set VarName -> C.Exp -> CExp VarName
+cuminExpToInternal localVars = \case
+  C.EVar v -> if v `Set.member` localVars then CEVar v else CEFun v []
+  C.ELet v x y -> CELet v (cuminExpToInternal localVars x) (abstract1 v (cuminExpToInternal (Set.insert v localVars) y))
+  C.ELetFree v ty e -> CELetFree v ty (abstract1 v (cuminExpToInternal (Set.insert v localVars) e))
   C.EFailed ty -> CEFailed ty
   C.EFun v tys -> CEFun v tys
-  C.EApp x y -> CEApp (cuminExpToInternal x) (cuminExpToInternal y)
+  C.EApp x y -> CEApp (cuminExpToInternal localVars x) (cuminExpToInternal localVars y)
   C.ELit l -> CELit l
-  C.EPrim oper xs -> CEPrim oper (map cuminExpToInternal xs)
+  C.EPrim oper xs -> CEPrim oper (map (cuminExpToInternal localVars) xs)
   C.ECon c tys -> CECon c tys
-  C.ECase e alts -> CECase (cuminExpToInternal e) (map cuminAltToInternal alts)
+  C.ECase e alts -> CECase (cuminExpToInternal localVars e) (map (cuminAltToInternal localVars) alts)
 
-cuminAltToInternal :: C.Alt -> Alt CExp VarName
-cuminAltToInternal (C.Alt p e) = case p of
-  PVar v -> AVarPat v (abstract1 v (cuminExpToInternal e))
-  PCon c vs -> AConPat c vs (abstract (`elemIndex` vs) (cuminExpToInternal e))
+cuminAltToInternal :: Set.Set VarName -> C.Alt -> Alt CExp VarName
+cuminAltToInternal localVars (C.Alt p e) = case p of
+  PVar v -> AVarPat v (abstract1 v (cuminExpToInternal (Set.insert v localVars) e))
+  PCon c vs -> AConPat c vs (abstract (`elemIndex` vs) (cuminExpToInternal (Set.fromList vs `Set.union` localVars) e))
 
 cuminBindingToInternal :: C.Binding -> CBinding VarName
 cuminBindingToInternal b = CBinding
   { _cBindName = b^.C.bindingName
   , _cBindType = b^.C.bindingType
   , _cBindArgs = b^.C.bindingArgs
-  , _cBindExpr = boundExp
+  , _cBindExpr = checkedBoundExp
   }
   where
-  boundExp = assert' isClosed $
-    abstract (`elemIndex` (b^.C.bindingArgs)) $ cuminExpToInternal $ b^.C.bindingExpr
+  checkedBoundExp = if isClosed boundExp
+    then boundExp
+    else $failure $ "Bug: Binding unexpectedly contains free variables: " ++ show boundExp
+  boundExp = abstract (`elemIndex` bindArgs) $ cuminExpToInternal (Set.fromList bindArgs) $ b^.C.bindingExpr
+  bindArgs = b^.C.bindingArgs
 
 cuminModuleToInternal :: C.Module -> CModule VarName
 cuminModuleToInternal m = CModule

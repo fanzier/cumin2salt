@@ -20,9 +20,6 @@ import           Prelude.Extras
 data Ident = Ident { varName :: VarName, varId :: Int }
   deriving (Show, Eq)
 
-assert' :: (a -> Bool) -> a -> a
-assert' f a = assert (f a) a
-
 data CModule v = CModule
   { _cModName  :: VarName
   , _cModADTs  :: M.Map VarName ADT
