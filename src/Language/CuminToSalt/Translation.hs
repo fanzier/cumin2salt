@@ -58,7 +58,8 @@ cuminBindingToInternal b = CBinding
   { _cBindName = b^.C.bindingName
   , _cBindType = b^.C.bindingType
   , _cBindArgs = b^.C.bindingArgs
-  , _cBindExpr = checkedBoundExp
+  , _cBindExp = checkedBoundExp
+  , _cBindSrc = b^.C.bindingSrc
   }
   where
   checkedBoundExp = if isClosed boundExp
@@ -68,11 +69,7 @@ cuminBindingToInternal b = CBinding
   bindArgs = b^.C.bindingArgs
 
 cuminModuleToInternal :: C.Module -> CModule VarName
-cuminModuleToInternal m = CModule
-  { _cModADTs = m^.modADTs
-  , _cModBinds = cuminBindingToInternal <$> m^.modBinds
-  , _cModName = m^.modName
-  }
+cuminModuleToInternal = fmap cuminBindingToInternal
 
 -- * Internal CuMin Representation -> Internal SaLT Representation
 
@@ -134,7 +131,8 @@ cBindToSBind varEnv b = SBinding
   , _sBindExp = makeLambda
       (zip3 [0..] (b^.cBindArgs) indexedTys)
       varEnv
-      (b^.cBindExpr)
+      (b^.cBindExp)
+  , _sBindSrc = b^.cBindSrc
   }
   where
   TyDecl q c tyCumin = b^.cBindType
@@ -151,16 +149,12 @@ cBindToSBind varEnv b = SBinding
         (abstractInScope (\j -> if i == j then Just () else Nothing) s)
 
 cModToSMod :: CModule VarName -> SModule VarName
-cModToSMod m = SModule
-  { _sModName = m^.cModName
-  , _sModADTs = m^.cModADTs
-  , _sModBinds = cBindToSBind initialVarEnv <$> m^.cModBinds
-  }
+cModToSMod m = cBindToSBind initialVarEnv <$> m
   where
   initialVarEnv :: VarEnv VarName
   initialVarEnv = makeInitialVarEnv
-    (fmap (transformTyDecl . view cBindType) $ m^.cModBinds)
-    (m^.cModADTs)
+    (fmap (transformTyDecl . view cBindType) $ m^.modBinds)
+    (m^.modADTs)
   transformTyDecl (TyDecl q c ty) = TyDecl q c (cTypeToSType ty)
 
 -- * Internal SaLT Representation -> SaLT
@@ -217,20 +211,15 @@ internalToSaltBinding varEnv b = fillBinding <$> internalToSalt varEnv (b^.sBind
     { S._bindingName = b^.sBindName
     , S._bindingExpr = e
     , S._bindingType = b^.sBindType
-    , S._bindingSrc = undefined
+    , S._bindingSrc = b^.sBindSrc
     }
 
 internalToSaltModule :: SModule VarName -> Renamer S.Module
 internalToSaltModule m = do
-  traverse_ addGlobal (M.keys $ m^.sModBinds)
-  fillModule <$> traverse (internalToSaltBinding initialVarEnv) (m^.sModBinds)
+  traverse_ addGlobal (M.keys $ m^.modBinds)
+  traverse (internalToSaltBinding initialVarEnv) m
   where
-  fillModule bs = CoreModule
-    { S._modADTs = m^.sModADTs
-    , S._modBinds = bs
-    , S._modName = m^.sModName
-    }
   initialVarEnv :: VarEnv VarName
   initialVarEnv = makeInitialVarEnv
-    (fmap (view sBindType) $ m^.sModBinds)
-    (m^.sModADTs)
+    (fmap (view sBindType) $ m^.modBinds)
+    (m^.modADTs)

@@ -19,20 +19,23 @@ import           Prelude.Extras
 data Ident = Ident { varName :: VarName, varId :: Int }
   deriving (Show, Eq)
 
-data CModule v = CModule
-  { _cModName  :: VarName
-  , _cModADTs  :: M.Map VarName ADT
-  , _cModBinds :: M.Map VarName (CBinding v)
+type CModule v = CoreModule (CBinding v)
+
+data CBinding v = CBinding
+  { _cBindName :: VarName
+  , _cBindArgs :: [v]
+  , _cBindExp :: Scope Int CExp v
+  , _cBindType :: TyDecl
+  , _cBindSrc :: SrcRef
   }
   deriving (Eq, Show, Functor, Foldable, Traversable)
 
-data CBinding v = CBinding
-  { _cBindName :: v
-  , _cBindArgs :: [v]
-  , _cBindExpr :: Scope Int CExp v
-  , _cBindType :: TyDecl
-  }
-  deriving (Eq, Show, Functor, Foldable, Traversable)
+instance IsBinding (CBinding v) where
+  type BindingExp (CBinding v) = Scope Int CExp v
+  bindingName f bnd = (\x -> bnd {_cBindName = x}) <$> f (_cBindName bnd)
+  bindingExpr f bnd = (\x -> bnd {_cBindExp = x}) <$> f (_cBindExp bnd)
+  bindingType f bnd = (\x -> bnd {_cBindType = x}) <$> f (_cBindType bnd)
+  bindingSrc  f bnd = (\x -> bnd {_cBindSrc  = x}) <$> f (_cBindSrc  bnd)
 
 -- Scoped CuMin Expression
 data CExp v
@@ -80,19 +83,22 @@ instance Bound Alt where
   AVarPat v x >>>= f = AVarPat v (x >>>= f)
   AConPat c vs x >>>= f = AConPat c vs (x >>>= f)
 
-data SModule v = SModule
-  { _sModName  :: VarName
-  , _sModADTs  :: M.Map VarName ADT
-  , _sModBinds :: M.Map VarName (SBinding v)
+type SModule v = CoreModule (SBinding v)
+
+data SBinding v = SBinding
+  { _sBindName :: VarName
+  , _sBindType :: TyDecl
+  , _sBindExp  :: SExp v
+  , _sBindSrc  :: SrcRef
   }
   deriving (Eq, Show, Functor, Foldable, Traversable)
 
-data SBinding v = SBinding
-  { _sBindName :: v
-  , _sBindType :: TyDecl
-  , _sBindExp  :: SExp v
-  }
-  deriving (Eq, Show, Functor, Foldable, Traversable)
+instance IsBinding (SBinding v) where
+  type BindingExp (SBinding v) = SExp v
+  bindingName f bnd = (\x -> bnd {_sBindName = x}) <$> f (_sBindName bnd)
+  bindingExpr f bnd = (\x -> bnd {_sBindExp = x}) <$> f (_sBindExp bnd)
+  bindingType f bnd = (\x -> bnd {_sBindType = x}) <$> f (_sBindType bnd)
+  bindingSrc  f bnd = (\x -> bnd {_sBindSrc  = x}) <$> f (_sBindSrc  bnd)
 
 -- Scoped SaLT Expression
 data SExp v
@@ -147,9 +153,7 @@ data VarInfo = VarInfo
   } deriving (Show)
 
 -- Lens stuff
-makeLenses ''CModule
 makeLenses ''CBinding
-makeLenses ''SModule
 makeLenses ''SBinding
 makeLenses ''VarEnv
 makeLenses ''VarInfo

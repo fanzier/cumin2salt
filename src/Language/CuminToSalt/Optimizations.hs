@@ -33,12 +33,12 @@ simplifyBinding :: VarEnv VarName -> SBinding VarName -> SBinding VarName
 simplifyBinding varEnv = sBindExp %~ simplifyExp varEnv
 
 simplifyModule :: SModule VarName -> SModule VarName
-simplifyModule m = m & sModBinds %~ fmap (simplifyBinding initialVarEnv)
+simplifyModule m = m & modBinds %~ fmap (simplifyBinding initialVarEnv)
   where
   initialVarEnv :: VarEnv VarName
   initialVarEnv = makeInitialVarEnv
-    (fmap (view sBindType) $ m^.sModBinds)
-    (m^.sModADTs)
+    (fmap (view sBindType) $ m^.modBinds)
+    (m^.modADTs)
 
 -- * Transform subexpressions
 
