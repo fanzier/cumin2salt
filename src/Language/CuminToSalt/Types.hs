@@ -1,9 +1,10 @@
-{-# LANGUAGE DeriveFoldable    #-}
-{-# LANGUAGE DeriveFunctor     #-}
-{-# LANGUAGE DeriveTraversable #-}
-{-# LANGUAGE PatternSynonyms   #-}
-{-# LANGUAGE TemplateHaskell   #-}
-{-# LANGUAGE TypeFamilies      #-}
+{-# LANGUAGE DeriveFoldable     #-}
+{-# LANGUAGE DeriveFunctor      #-}
+{-# LANGUAGE DeriveTraversable  #-}
+{-# LANGUAGE PatternSynonyms    #-}
+{-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE TemplateHaskell    #-}
+{-# LANGUAGE TypeFamilies       #-}
 module Language.CuminToSalt.Types where
 
 import           Bound
@@ -16,22 +17,24 @@ import           FunLogic.Core.AST   as F
 import qualified Language.CuMin.AST  as C
 import           Prelude.Extras
 
-data Ident = Ident { varName :: VarName, varId :: Int }
-  deriving (Show, Eq)
+data Void
 
-type CModule v = CoreModule (CBinding v)
+deriving instance Eq Void
+deriving instance Show Void
 
-data CBinding v = CBinding
+type CModule = CoreModule CBinding
+
+data CBinding = CBinding
   { _cBindName :: VarName
-  , _cBindArgs :: [v]
-  , _cBindExp :: Scope Int CExp v
+  , _cBindArgs :: [VarName]
+  , _cBindExp  :: Scope Int CExp Void
   , _cBindType :: TyDecl
-  , _cBindSrc :: SrcRef
+  , _cBindSrc  :: SrcRef
   }
-  deriving (Eq, Show, Functor, Foldable, Traversable)
+  deriving (Eq, Show)
 
-instance IsBinding (CBinding v) where
-  type BindingExp (CBinding v) = Scope Int CExp v
+instance IsBinding CBinding where
+  type BindingExp CBinding = Scope Int CExp Void
   bindingName f bnd = (\x -> bnd {_cBindName = x}) <$> f (_cBindName bnd)
   bindingExpr f bnd = (\x -> bnd {_cBindExp = x}) <$> f (_cBindExp bnd)
   bindingType f bnd = (\x -> bnd {_cBindType = x}) <$> f (_cBindType bnd)
@@ -83,18 +86,18 @@ instance Bound Alt where
   AVarPat v x >>>= f = AVarPat v (x >>>= f)
   AConPat c vs x >>>= f = AConPat c vs (x >>>= f)
 
-type SModule v = CoreModule (SBinding v)
+type SModule = CoreModule SBinding
 
-data SBinding v = SBinding
+data SBinding = SBinding
   { _sBindName :: VarName
   , _sBindType :: TyDecl
-  , _sBindExp  :: SExp v
+  , _sBindExp  :: SExp Void
   , _sBindSrc  :: SrcRef
   }
-  deriving (Eq, Show, Functor, Foldable, Traversable)
+  deriving (Eq, Show)
 
-instance IsBinding (SBinding v) where
-  type BindingExp (SBinding v) = SExp v
+instance IsBinding SBinding where
+  type BindingExp SBinding = SExp Void
   bindingName f bnd = (\x -> bnd {_sBindName = x}) <$> f (_sBindName bnd)
   bindingExpr f bnd = (\x -> bnd {_sBindExp = x}) <$> f (_sBindExp bnd)
   bindingType f bnd = (\x -> bnd {_sBindType = x}) <$> f (_sBindType bnd)

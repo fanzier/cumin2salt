@@ -12,7 +12,7 @@ import           Control.Lens
 import           Data.Foldable                      (traverse_)
 import           Data.List                          (elemIndex)
 import qualified Data.Map                           as M
-import           Data.Maybe                         (fromJust)
+import           Data.Maybe
 import qualified Data.Set                           as Set
 import           Debug.Trace.LocationTH
 import           FunLogic.Core.AST                  as F
@@ -53,7 +53,7 @@ cuminAltToInternal localVars (C.Alt p e) = case p of
   PVar v -> AVarPat v (abstract1 v (cuminExpToInternal (Set.insert v localVars) e))
   PCon c vs -> AConPat c vs (abstract (`elemIndex` vs) (cuminExpToInternal (Set.fromList vs `Set.union` localVars) e))
 
-cuminBindingToInternal :: C.Binding -> CBinding VarName
+cuminBindingToInternal :: C.Binding -> CBinding
 cuminBindingToInternal b = CBinding
   { _cBindName = b^.C.bindingName
   , _cBindType = b^.C.bindingType
@@ -62,13 +62,12 @@ cuminBindingToInternal b = CBinding
   , _cBindSrc = b^.C.bindingSrc
   }
   where
-  checkedBoundExp = if isClosed boundExp
-    then boundExp
-    else $failure $ "Bug: Binding unexpectedly contains free variables: " ++ show boundExp
+  checkedBoundExp = fromMaybe failureFreeVars (closed boundExp)
+  failureFreeVars = $failure $ "Bug: Binding unexpectedly contains free variables: " ++ show boundExp
   boundExp = abstract (`elemIndex` bindArgs) $ cuminExpToInternal (Set.fromList bindArgs) $ b^.C.bindingExpr
   bindArgs = b^.C.bindingArgs
 
-cuminModuleToInternal :: C.Module -> CModule VarName
+cuminModuleToInternal :: C.Module -> CModule
 cuminModuleToInternal = fmap cuminBindingToInternal
 
 -- * Internal CuMin Representation -> Internal SaLT Representation
@@ -124,7 +123,7 @@ cExpToSExp varEnv = \case
       [] -> SESet $ SEPrim oper (reverse fs)
       x:xs -> SESetBind x "primOpArg" (toScope $ go (return (B ()) : map (fmap F) fs) (map (fmap F) xs))
 
-cBindToSBind :: VarEnv VarName -> CBinding VarName -> SBinding VarName
+cBindToSBind :: VarEnv Void -> CBinding -> SBinding
 cBindToSBind varEnv b = SBinding
   { _sBindName = b^.cBindName
   , _sBindType = TyDecl q c (TSet tySalt)
@@ -148,10 +147,10 @@ cBindToSBind varEnv b = SBinding
         vars
         (abstractInScope (\j -> if i == j then Just () else Nothing) s)
 
-cModToSMod :: CModule VarName -> SModule VarName
+cModToSMod :: CModule -> SModule
 cModToSMod m = cBindToSBind initialVarEnv <$> m
   where
-  initialVarEnv :: VarEnv VarName
+  initialVarEnv :: VarEnv Void
   initialVarEnv = makeInitialVarEnv
     (fmap (transformTyDecl . view cBindType) $ m^.modBinds)
     (m^.modADTs)
@@ -204,7 +203,7 @@ altToSalt varEnv ty =
         return $ S.Alt (PCon c ws) e
     )
 
-internalToSaltBinding :: VarEnv VarName -> SBinding VarName -> Renamer S.Binding
+internalToSaltBinding :: VarEnv Void -> SBinding -> Renamer S.Binding
 internalToSaltBinding varEnv b = fillBinding <$> internalToSalt varEnv (b^.sBindExp)
   where
   fillBinding e = S.Binding
@@ -214,12 +213,12 @@ internalToSaltBinding varEnv b = fillBinding <$> internalToSalt varEnv (b^.sBind
     , S._bindingSrc = b^.sBindSrc
     }
 
-internalToSaltModule :: SModule VarName -> Renamer S.Module
+internalToSaltModule :: SModule -> Renamer S.Module
 internalToSaltModule m = do
   traverse_ addGlobal (M.keys $ m^.modBinds)
   traverse (internalToSaltBinding initialVarEnv) m
   where
-  initialVarEnv :: VarEnv VarName
+  initialVarEnv :: VarEnv Void
   initialVarEnv = makeInitialVarEnv
     (fmap (view sBindType) $ m^.modBinds)
     (m^.modADTs)

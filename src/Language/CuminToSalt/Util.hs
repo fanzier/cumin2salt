@@ -35,7 +35,7 @@ lookupGlobal varEnv v = $checkTrace v . fromJust $ ty1 `mplus` (conDeclToTyDecl 
   ty1 = varEnv^.globalTypes.at v
   conDecl = varEnv^.constructorTypes.at v
 
-makeInitialVarEnv :: M.Map VarName TyDecl -> M.Map VarName ADT -> VarEnv VarName
+makeInitialVarEnv :: Show v => M.Map VarName TyDecl -> M.Map VarName ADT -> VarEnv v
 makeInitialVarEnv globals adts = VarEnv
   { _localVar = \v ->  error $ "No free variable expected but found: " ++ show v
   , _globalTypes = globals

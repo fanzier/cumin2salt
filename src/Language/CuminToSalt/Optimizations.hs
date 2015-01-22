@@ -29,13 +29,13 @@ simplifyExp varEnv e = case transformSubExpressions simplifyExp varEnv e of
   -- Leave everything else untouched.
   ex -> ex
 
-simplifyBinding :: VarEnv VarName -> SBinding VarName -> SBinding VarName
+simplifyBinding :: VarEnv Void -> SBinding -> SBinding
 simplifyBinding varEnv = sBindExp %~ simplifyExp varEnv
 
-simplifyModule :: SModule VarName -> SModule VarName
+simplifyModule :: SModule -> SModule
 simplifyModule m = m & modBinds %~ fmap (simplifyBinding initialVarEnv)
   where
-  initialVarEnv :: VarEnv VarName
+  initialVarEnv :: VarEnv Void
   initialVarEnv = makeInitialVarEnv
     (fmap (view sBindType) $ m^.modBinds)
     (m^.modADTs)
