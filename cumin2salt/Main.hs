@@ -11,6 +11,7 @@ import           Options.Applicative
 
 data Options = Options
   { inputFile :: String
+  , withPrelude :: Bool
   }
 
 main :: IO ()
@@ -24,9 +25,10 @@ main = execParser opts >>= act
 optionParser :: Parser Options
 optionParser = Options
   <$> argument str (metavar "INPUT" <> help "the CuMin input file")
+  <*> switch ( long "with-prelude" <> help "whether to include prelude functions in output")
 
 act :: Options -> IO ()
-act (Options { inputFile }) =
+act (Options { inputFile, withPrelude }) =
   CM.buildModuleFromFile inputFile >>= \case
     Left msg -> print msg
     Right modul -> case importUnqualified modul preludeModule of
@@ -34,5 +36,6 @@ act (Options { inputFile }) =
       Right modulWithPrelude ->
         SP.displayPretty 80
         . SP.prettyModule
+        . (if withPrelude then id else filterPrelude)
         . cuminToSalt
         $ modulWithPrelude

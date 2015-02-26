@@ -18,6 +18,7 @@ import           Debug.Trace.LocationTH
 import           FunLogic.Core.AST                  as F
 import qualified Language.CuMin.AST                 as C
 import           Language.CuminToSalt.Optimizations (simplifyModule)
+import           Language.CuMin.Prelude             (preludeModule)
 import           Language.CuminToSalt.Renamer
 import           Language.CuminToSalt.TypeChecker
 import           Language.CuminToSalt.Types
@@ -32,6 +33,14 @@ cuminToSalt
   . simplifyModule
   . cModToSMod
   . cuminModuleToInternal
+
+filterPrelude :: S.Module -> S.Module
+filterPrelude
+  = (modBinds %~ (`M.difference` preludeBinds))
+  . (modADTs %~ (`M.difference` preludeADTs))
+  where
+  preludeBinds = preludeModule^.modBinds
+  preludeADTs = preludeModule^.modADTs
 
 -- * CuMin -> Internal CuMin Representation
 
