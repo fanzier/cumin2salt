@@ -157,13 +157,19 @@ cBindToSBind varEnv b = SBinding
         (abstractInScope (\j -> if i == j then Just () else Nothing) s)
 
 cModToSMod :: CModule -> SModule
-cModToSMod m = cBindToSBind initialVarEnv <$> m
+cModToSMod m = translateADTs $ cBindToSBind initialVarEnv <$> m
   where
   initialVarEnv :: VarEnv Void
   initialVarEnv = makeInitialVarEnv
     (fmap (transformTyDecl . view cBindType) $ m^.modBinds)
     (m^.modADTs)
   transformTyDecl (TyDecl q c ty) = TyDecl q c (cTypeToSType ty)
+  translateADTs = modADTs %~ fmap cAdtToSAdt
+
+cAdtToSAdt :: ADT -> ADT
+cAdtToSAdt = adtConstr.each %~ translateConDecl
+  where
+  translateConDecl (ConDecl c tys) = ConDecl c (map cTypeToSType tys)
 
 -- * Internal SaLT Representation -> SaLT
 

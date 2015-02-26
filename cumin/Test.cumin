@@ -1,3 +1,4 @@
+data DList a = DList (List a -> List a)
 
 tMap :: forall a b.(a -> b) -> Pair a a -> Pair b b
 tMap f x = case x of Pair a b -> Pair<:b,b:> (f a) (f b)
