@@ -51,6 +51,7 @@ executable cumin2salt
                      , mtl
                      , prelude-extras
                      , transformers
+                     , optparse-applicative
                      , funlogic-core
                      , language-salt
                      , language-cumin
