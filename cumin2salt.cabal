@@ -51,6 +51,7 @@ executable cumin2salt
                      , mtl
                      , prelude-extras
                      , transformers
+                     , data-default-class
                      , ansi-wl-pprint
                      , optparse-applicative
                      , funlogic-core
