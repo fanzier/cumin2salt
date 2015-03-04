@@ -9,7 +9,7 @@ import qualified Language.CuMin.AST               as C
 import qualified Language.CuMin.ModBuilder        as CM
 import           Language.CuMin.Prelude           (preludeModule)
 import qualified Language.CuMin.TypeChecker       as CT
-import           Language.CuminToSalt.Translation (cuminToSalt, filterPrelude)
+import           Language.CuminToSalt
 import qualified Language.SaLT.Pretty             as SP
 import           Options.Applicative
 import qualified Text.PrettyPrint.ANSI.Leijen     as PP
@@ -17,6 +17,7 @@ import qualified Text.PrettyPrint.ANSI.Leijen     as PP
 data Options = Options
   { inputFile   :: String
   , outputFile  :: String
+  , doSimplify  :: Bool
   , withPrelude :: Bool
   }
 
@@ -32,10 +33,11 @@ optionParser :: Parser Options
 optionParser = Options
   <$> argument str (metavar "INPUT" <> help "the CuMin input file")
   <*> strOption (short 'o' <> metavar "OUTPUT" <> value "Out.cumin" <> help "the SaLT output file")
+  <*> switch (short 's' <> long "simplify" <> help "whether to simplify the output")
   <*> switch (long "with-prelude" <> help "whether to include prelude functions in output")
 
 act :: Options -> IO ()
-act (Options { inputFile, outputFile, withPrelude }) =
+act (Options { inputFile, outputFile, doSimplify, withPrelude }) =
   checkFile inputFile >>= \case
     Nothing -> putStrLn $ "\nLoading `" ++ inputFile ++ "` failed."
     Just modulWithPrelude ->
@@ -45,7 +47,7 @@ act (Options { inputFile, outputFile, withPrelude }) =
       . PP.plain
       . SP.prettyModule
       . (if withPrelude then id else filterPrelude)
-      . cuminToSalt
+      . cuminToSalt doSimplify
       $ modulWithPrelude
 
 checkFile :: FilePath -> IO (Maybe C.Module)

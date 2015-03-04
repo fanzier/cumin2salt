@@ -26,22 +26,6 @@ import           Language.CuminToSalt.Util
 import qualified Language.SaLT.AST                  as S
 import qualified Language.SaLT.Pretty               as SP
 
-cuminToSalt :: C.Module -> S.Module
-cuminToSalt
-  = evalRenamer
-  . internalToSaltModule
-  . simplifyModule
-  . cModToSMod
-  . cuminModuleToInternal
-
-filterPrelude :: S.Module -> S.Module
-filterPrelude
-  = (modBinds %~ (`M.difference` preludeBinds))
-  . (modADTs %~ (`M.difference` preludeADTs))
-  where
-  preludeBinds = preludeModule^.modBinds
-  preludeADTs = preludeModule^.modADTs
-
 -- * CuMin -> Internal CuMin Representation
 
 cuminExpToInternal :: Set.Set VarName -> C.Exp -> CExp VarName
