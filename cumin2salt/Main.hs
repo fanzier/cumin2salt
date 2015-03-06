@@ -32,7 +32,7 @@ main = execParser opts >>= act
 optionParser :: Parser Options
 optionParser = Options
   <$> argument str (metavar "INPUT" <> help "the CuMin input file")
-  <*> strOption (short 'o' <> metavar "OUTPUT" <> value "Out.cumin" <> help "the SaLT output file")
+  <*> strOption (short 'o' <> metavar "OUTPUT" <> value "Out.salt" <> help "the SaLT output file (default: Out.salt)")
   <*> switch (short 's' <> long "simplify" <> help "whether to simplify the output")
   <*> switch (long "with-prelude" <> help "whether to include prelude functions in output")
 
