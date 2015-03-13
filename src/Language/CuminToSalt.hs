@@ -5,7 +5,6 @@ import qualified Data.Map                           as M
 import           FunLogic.Core.AST                  as F
 import qualified Language.CuMin.AST                 as C
 import           Language.CuMin.Prelude             (preludeModule)
-import           Language.CuminToSalt.Analysis
 import           Language.CuminToSalt.Optimizations (simplifyModule)
 import           Language.CuminToSalt.Renamer
 import           Language.CuminToSalt.Translation
