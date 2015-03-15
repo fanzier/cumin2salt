@@ -8,6 +8,7 @@ module Language.CuminToSalt.Translation where
 
 import           Bound
 import           Control.Applicative
+import           Control.Arrow (second)
 import           Control.Lens
 import           Data.Foldable                      (traverse_)
 import           Data.List                          (elemIndex)
@@ -17,15 +18,11 @@ import qualified Data.Set                           as Set
 import           Debug.Trace.LocationTH
 import           FunLogic.Core.AST                  as F
 import qualified Language.CuMin.AST                 as C
-import           Language.CuminToSalt.Optimizations (simplifyModule)
-import           Language.CuMin.Prelude             (preludeModule)
 import           Language.CuminToSalt.Renamer
 import           Language.CuminToSalt.TypeChecker
 import           Language.CuminToSalt.Types
 import           Language.CuminToSalt.Util
 import qualified Language.SaLT.AST                  as S
-import qualified Language.SaLT.Pretty               as SP
-
 -- * CuMin -> Internal CuMin Representation
 
 cuminExpToInternal :: Set.Set VarName -> C.Exp -> CExp VarName
@@ -73,29 +70,32 @@ cExpToSExp varEnv = \case
       x' = cExpToSExp varEnv x
       TSet ty = tyCheckSExp varEnv x'
       s' = transformScope cExpToSExp (const $ VarInfo v ty) varEnv s
-    in SESetBind x' v s'
+    in SESetBind x' (SELam v ty s')
   CELetFree v ty s ->
     let s' = transformScope cExpToSExp (const $ VarInfo v ty) varEnv s
-    in SESetBind (SEUnknown ty) v s'
+    in SESetBind (SEUnknown ty) (SELam v ty s')
   CEFailed ty -> SESet (SEFailed ty)
   CEFun v tys -> SEFun v tys
   CEApp x y ->
     let
       x' = cExpToSExp varEnv x
+      TSet xTy = $check $ tyCheckSExp varEnv x'
       y' = cExpToSExp varEnv y
-    in SESetBind x' "fun" (toScope $ SESetBind (F <$> y') "arg" (toScope $ SEApp (return (F (B ()))) (return (B ()))))
+      TSet yTy = $check $ tyCheckSExp varEnv y'
+    in SESetBind x' $ SELam "fun" xTy $ toScope $ SESetBind (F <$> y') $ SELam "arg" yTy $ toScope $ SEApp (return . F $ B ()) (return $ B ())
   CELit lit -> SESet (SELit lit)
   CEPrim oper es ->
     let
       es' = map (cExpToSExp varEnv) es
-    in makePrimExp es' oper
+      typedEs = map (\e -> ($check $ let TSet ty = tyCheckSExp varEnv e in ty, e)) es'
+    in makePrimExp typedEs oper
   CECon c tys -> makeConstructorLambda c tys
   CECase e alts ->
     let
       e' = cExpToSExp varEnv e
       TSet ty = tyCheckSExp varEnv e'
       alts' = map (transformAlt cExpToSExp ty varEnv) alts
-    in SESetBind e' "scrutinee" (Scope $ SECase (return (B ())) (map (fmap (F . return)) alts'))
+    in SESetBind e' $ SELam "scrutinee" ty $ Scope $ SECase (return (B ())) (map (fmap (F . return)) alts')
   where
   makeConstructorLambda :: Show v => VarName -> [Type] -> SExp v
   makeConstructorLambda c tyInsts =
@@ -108,18 +108,18 @@ cExpToSExp varEnv = \case
       scope e [] = SESet e
       scope e (t:ts) = SESet . SELam "conArg" t $ Scope (scope (SEApp (F . return <$> e) (return (B ()))) ts)
     in scope (SECon c tyInsts) tys
-  makePrimExp :: Show v => [SExp v] -> C.PrimOp -> SExp v
+  makePrimExp :: Show v => [(Type, SExp v)] -> C.PrimOp -> SExp v
   makePrimExp exps oper = go [] exps
     where
-    go :: Show v => [SExp v] -> [SExp v] -> SExp v
+    go :: Show v => [SExp v] -> [(Type, SExp v)] -> SExp v
     go fs = \case
       [] -> SESet $ SEPrim oper (reverse fs)
-      x:xs -> SESetBind x "primOpArg" (toScope $ go (return (B ()) : map (fmap F) fs) (map (fmap F) xs))
+      (ty,x):xs -> SESetBind x $ SELam "primOpArg" ty $ toScope $ go (return (B ()) : map (fmap F) fs) (map (second (fmap F)) xs)
 
 cBindToSBind :: VarEnv Void -> CBinding -> SBinding
 cBindToSBind varEnv b = SBinding
   { _sBindName = b^.cBindName
-  , _sBindType = TyDecl q c (TSet tySalt)
+  , _sBindType = tyDecl
   , _sBindExp = makeLambda
       (zip3 [0..] (b^.cBindArgs) indexedTys)
       varEnv
@@ -127,11 +127,10 @@ cBindToSBind varEnv b = SBinding
   , _sBindSrc = b^.cBindSrc
   }
   where
-  TyDecl q c tyCumin = b^.cBindType
-  tySalt = cTypeToSType tyCumin
+  tyDecl@(TyDecl _ _ (TSet tySalt)) = translateTyDecl (b^.cBindType)
   (indexedTys, _) = extractSetArgs tySalt
   makeLambda :: Show v => [(Int, VarName, Type)] -> VarEnv v -> Scope Int CExp v -> SExp v
-  makeLambda [] vars s = cExpToSExp vars ($check $ fromJust $ extractFromConstantScope s)
+  makeLambda [] vars s = cExpToSExp vars ($checkTrace (show s) $ fromJust $ extractFromConstantScope s)
   makeLambda ((i, v, ty):tys) vars s
     = SESet . SELam v ty $
       transformScope
@@ -145,10 +144,14 @@ cModToSMod m = translateADTs $ cBindToSBind initialVarEnv <$> m
   where
   initialVarEnv :: VarEnv Void
   initialVarEnv = makeInitialVarEnv
-    (fmap (transformTyDecl . view cBindType) $ m^.modBinds)
+    (fmap (translateTyDecl . view cBindType) $ m^.modBinds)
     (m^.modADTs)
-  transformTyDecl (TyDecl q c ty) = TyDecl q c (cTypeToSType ty)
-  translateADTs = modADTs %~ fmap cAdtToSAdt
+
+translateTyDecl :: TyDecl -> TyDecl
+translateTyDecl (TyDecl q c ty) = TyDecl q c (TSet (cTypeToSType ty))
+
+translateADTs :: CoreModule b -> CoreModule b
+translateADTs = modADTs %~ fmap cAdtToSAdt
 
 cAdtToSAdt :: ADT -> ADT
 cAdtToSAdt = adtConstr.each %~ translateConDecl
@@ -165,10 +168,9 @@ internalToSalt varEnv = \case
       Just j <- resolve v
       let w = makeVar v j
       S.ELam w ty <$> reduceScope internalToSalt (const $ VarInfo w ty) varEnv x
-  SESetBind x v y -> S.EPrim S.PrimBind <$> do
+  SESetBind x y -> S.EPrim S.PrimBind <$> do
     x' <- internalToSalt varEnv x
-    let TSet ty = tyCheckSExp varEnv x
-    y' <- internalToSalt varEnv (SELam v ($checkTrace (show (tyCheckSExp varEnv x) ++ "\n\n" ++ show (SP.prettyExp x')) ty) y)
+    y' <- internalToSalt varEnv y
     return [x', y']
   SEApp x y -> S.EApp <$> internalToSalt varEnv x <*> internalToSalt varEnv y
   SELit l -> return $ S.ELit l

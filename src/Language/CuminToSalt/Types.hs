@@ -108,7 +108,7 @@ data SExp v
   = SEVar v
   | SEFun VarName [Type]
   | SELam VarName Type (Scope () SExp v)
-  | SESetBind (SExp v) VarName (Scope () SExp v)
+  | SESetBind (SExp v) (SExp v)
   | SEApp (SExp v) (SExp v)
   | SELit Lit
   | SEPrim C.PrimOp [SExp v]
@@ -131,7 +131,7 @@ instance Monad SExp where
     SEVar v -> f v
     SEFun v tys -> SEFun v tys
     SELam v ty x -> SELam v ty (x >>>= f)
-    SESetBind x v y -> SESetBind (x >>= f) v (y >>>= f)
+    SESetBind x y -> SESetBind (x >>= f) (y >>= f)
     SEApp x y -> SEApp (x >>= f) (y >>= f)
     SELit l -> SELit l
     SEPrim oper es -> SEPrim oper (map (>>= f) es)

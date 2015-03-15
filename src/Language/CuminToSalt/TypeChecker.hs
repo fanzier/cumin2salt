@@ -32,9 +32,11 @@ tyCheckSExp varEnv = \case
   SEVar v -> _vType $ _localVar varEnv v
   SEFun v tys -> $check . fromJust . instantiateTyDecl tys $ lookupGlobal varEnv v
   SELam v ty x -> TFun ty $ reduceScope tyCheckSExp (const $ VarInfo v ty) varEnv x
-  SESetBind x v y ->
-    let TSet ty = tyCheckSExp varEnv x
-    in reduceScope tyCheckSExp (const $ VarInfo v ty) varEnv y
+  SESetBind x y ->
+    let ty = tyCheckSExp varEnv y in
+    case ty of
+      TFun _ ty -> ty
+      _ -> error (show ty)
   SEApp x _ -> let t = tyCheckSExp varEnv x in
     case t of
       TFun _ ty -> ty
