@@ -5,6 +5,7 @@
 module Language.CuminToSalt.Optimizations where
 
 import           Bound
+import           Bound.Scope
 import           Control.Applicative
 import           Control.Lens
 import           FunLogic.Core.AST                as F
@@ -15,7 +16,9 @@ import           Language.CuminToSalt.Util
 simplifyExp :: forall v. Show v => VarEnv v -> SExp v -> SExp v
 simplifyExp varEnv e = case transformSubExpressions simplifyExp varEnv e of
   -- First monad law. This one is used all the time.
-  SESetBind (SESet x) _ y -> simplifyExp varEnv $ instantiate (const x) y
+  SESetBind (SESet x) v y ->
+    let ty = tyCheckSExp varEnv x
+    in simplifyExp varEnv $ SEApp (SELam v ty y) x
   -- Second monad law. This almost never fires. Included for completeness
   -- and silly cases like "let y = x in y" which is translated to
   -- "x >>= \y -> { y }" and transformed to "x" as desired.
@@ -25,9 +28,12 @@ simplifyExp varEnv e = case transformSubExpressions simplifyExp varEnv e of
   SESetBind (SESetBind m x f) y g ->
     SESetBind m x (toScope $ SESetBind (fromScope f) y (F <$> g))
   -- Beta reduction. Useful for constructor lambdas.
-  SEApp (SELam _ _ x) y -> simplifyExp varEnv $ instantiate (const y) x
+  SEApp (SELam _ _ x) y | safeToReduce x -> simplifyExp varEnv $ instantiate (const y) x
   -- Leave everything else untouched.
   ex -> ex
+  where
+  -- Beta reduction is safe if the bound variable occurs at most once.
+  safeToReduce x = length (bindings x) <= 1
 
 simplifyBinding :: VarEnv Void -> SBinding -> SBinding
 simplifyBinding varEnv = sBindExp %~ simplifyExp varEnv
