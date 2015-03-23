@@ -25,17 +25,17 @@ library
                    , Language.CuminToSalt.Util
   ghc-options:  -Wall
   hs-source-dirs:  src
-  build-depends:   base
-                 , bound
-                 , containers
-                 , lens
-                 , loch-th
-                 , mtl
-                 , prelude-extras
-                 , transformers
-                 , funlogic-core
-                 , language-salt
-                 , language-cumin
+  build-depends:       base                 ==4.7.*
+                     , lens                 ==4.4.*
+                     , mtl                  ==2.1.*
+                     , containers           ==0.5.*
+                     , bound                ==1.0.*
+                     , loch-th              ==0.2.*
+                     , prelude-extras       ==0.4.*
+                     , transformers         ==0.3.*
+                     , funlogic-core
+                     , language-salt
+                     , language-cumin
   default-language: Haskell2010
 
 executable cumin2salt
@@ -43,17 +43,17 @@ executable cumin2salt
   -- other-modules:       
   -- other-extensions:
   ghc-options: -Wall
-  build-depends:       base >=4.7 && <4.8
-                     , bound
-                     , containers
-                     , lens
-                     , loch-th
-                     , mtl
-                     , prelude-extras
-                     , transformers
+  build-depends:       base                 ==4.7.*
+                     , lens                 ==4.4.*
+                     , mtl                  ==2.1.*
+                     , containers           ==0.5.*
+                     , bound                ==1.0.*
+                     , loch-th              ==0.2.*
+                     , prelude-extras       ==0.4.*
+                     , transformers         ==0.3.*
                      , data-default-class
-                     , ansi-wl-pprint
-                     , optparse-applicative
+                     , ansi-wl-pprint       ==0.6.*
+                     , optparse-applicative ==0.11.*
                      , funlogic-core
                      , language-salt
                      , language-cumin
