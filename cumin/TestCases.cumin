@@ -1,0 +1,8 @@
+mapTest :: List Bool
+mapTest = map<:Bool,Bool:> not [True, False]<:Bool:>
+
+andTest :: Bool
+andTest = and False failed<:Bool:>
+
+failedTest :: forall a. a
+failedTest = failed<:a:>
