@@ -1,22 +1,24 @@
-{-# LANGUAGE LambdaCase, QuasiQuotes #-}
+{-# LANGUAGE LambdaCase  #-}
+{-# LANGUAGE QuasiQuotes #-}
 module Main where
 
-import Test.Hspec
-import Language.CuminToSalt
-import Data.Maybe (mapMaybe)
-import qualified Language.CuMin as Cumin
-import qualified Language.SaLT as Salt
-import qualified Data.Map as M
-import Data.Default.Class
-import qualified Text.PrettyPrint.ANSI.Leijen  as PP
-import Data.Function
-import qualified FunLogic.Semantics.Search as Search
+import           Control.Applicative
+import qualified Control.Monad.Logic                   as Logic
+import           Data.Default.Class
+import qualified Data.Map                              as M
+import           Data.Maybe                            (mapMaybe)
+import           Data.Traversable
+import qualified FunLogic.Semantics.Search             as Search
+import qualified Language.CuMin                        as Cumin
 import qualified Language.CuMin.Semantics.Denotational as CD
-import qualified Language.SaLT.Semantics.Denotational as SD
-import qualified Control.Monad.Logic as Logic
-import Data.Traversable
-import Control.Applicative
+import           Language.CuminToSalt
+import qualified Language.SaLT                         as Salt
+import qualified Language.SaLT.Semantics.Denotational  as SD
+import           Test.Hspec
+import qualified Text.PrettyPrint.ANSI.Leijen          as PP
 
+-- | Stores the result of an evaluation.
+-- CuMin and SalT values are converted to this type for comparison.
 data Result = Constructor Cumin.DataConName [Result] | Literal Integer
   deriving (Show, Eq)
 
@@ -28,6 +30,8 @@ type BFSMonad = Logic.Logic
 main :: IO ()
 main = hspec spec
 
+-- | Specifies that the translated CuMin functions give the same results as the original ones.
+-- This is checked with and without optimizations enabled.
 spec :: Spec
 spec =
   describe "CuMin/SaLT equivalence tests" $ do

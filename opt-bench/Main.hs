@@ -1,29 +1,28 @@
-{-# LANGUAGE LambdaCase, QuasiQuotes #-}
+{-# LANGUAGE LambdaCase  #-}
+{-# LANGUAGE QuasiQuotes #-}
 module Main where
 
-import Language.CuminToSalt
-import Data.Maybe (mapMaybe)
-import qualified Language.CuMin as Cumin
-import qualified Language.SaLT as Salt
-import qualified Data.Map as M
-import Data.Default.Class
-import qualified Text.PrettyPrint.ANSI.Leijen  as PP
-import Data.Function
-import qualified FunLogic.Semantics.Search as Search
-import qualified Language.CuMin.Semantics.Denotational as CD
-import qualified Language.SaLT.Semantics.Denotational as SD
-import qualified Control.Monad.Logic as Logic
-import Data.Traversable
-import Control.Applicative
-import Criterion.Main
-import Control.DeepSeq (NFData (..))
-import Debug.Trace
+import           Control.Applicative
+import           Control.DeepSeq                       (NFData (..))
+import qualified Control.Monad.Logic                   as Logic
+import           Criterion.Main
+import           Data.Default.Class
+import qualified Data.Map                              as M
+import           Data.Maybe                            (mapMaybe)
+import           Data.Traversable
+import qualified FunLogic.Semantics.Search             as Search
+import qualified Language.CuMin                        as Cumin
+import           Language.CuminToSalt
+import qualified Language.SaLT                         as Salt
+import qualified Language.SaLT.Semantics.Denotational  as SD
+import qualified Text.PrettyPrint.ANSI.Leijen          as PP
 
 -- | Stores the result of an evaluation.
 -- CuMin and SalT values are converted to this type for comparison.
 data Result = Constructor Cumin.DataConName [Result] | Literal Integer
   deriving (Show, Eq)
 
+-- | Allows to evaluate the computation results completely.
 instance NFData Result where
   rnf (Constructor _ rs) = rnf rs
   rnf (Literal i) = rnf i
@@ -52,6 +51,7 @@ main = do
     , bench "Opt" $ nf (saltEvaluateFirst optMod) exp
     ]
 
+-- | Evaluates the SaLT expression and returns the first result.
 saltEvaluateFirst :: Salt.Module -> Salt.Exp -> Result
 saltEvaluateFirst modul e = head $ mapMaybe saltToResult $ Search.observeAll $ ensureSet (SD.runEval (SD.eval e) modul SD.StepInfinity id :: SD.Value BFSMonad)
   where
