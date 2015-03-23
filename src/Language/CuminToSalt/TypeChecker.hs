@@ -33,18 +33,24 @@ tyCheckSExp varEnv = \case
   SEFun v tys -> $check . fromJust . instantiateTyDecl tys $ lookupGlobal varEnv v
   SELam v ty x -> TFun ty $ reduceScope tyCheckSExp (const $ VarInfo v ty) varEnv x
   SESetBind x y ->
-    let ty = tyCheckSExp varEnv y in
-    case ty of
-      TFun _ ty -> ty
-      _ -> error (show ty)
-  SEApp x _ -> let t = tyCheckSExp varEnv x in
-    case t of
-      TFun _ ty -> ty
-      _ -> error (show t)
+    let TSet xTy = tyCheckSExp varEnv x
+        yTy = tyCheckSExp varEnv y
+    in case yTy of
+      TFun argTy resTy | argTy == xTy -> resTy
+      _ -> $failure $ show yTy ++ " doesn't match " ++ show xTy
+  SEApp y x ->
+    let xTy = tyCheckSExp varEnv x
+        yTy = tyCheckSExp varEnv y
+    in case yTy of
+      TFun argTy resTy | argTy == xTy -> resTy
+      _ -> $failure $ show yTy ++ " doesn't match " ++ show xTy
   SELit _ -> TNat
-  SEPrim oper _ -> case oper of
-    C.PrimEq -> TCon "Bool" []
-    C.PrimAdd -> TNat
+  SEPrim oper es ->
+    let tys = map (tyCheckSExp varEnv) es
+    in if any (/= head tys) tys then $failure $ show oper ++ show tys else
+    case oper of
+      C.PrimEq -> TCon "Bool" []
+      C.PrimAdd -> TNat
   SECon c tys -> $check . fromJust . instantiateTyDecl tys . conDeclToTyDecl $ lookupConstructor varEnv c
   SESet x -> TSet $ tyCheckSExp varEnv x
   SECase e alts -> let ty = tyCheckSExp varEnv e in reduceAlt tyCheckSExp ty varEnv (head alts)
