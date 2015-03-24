@@ -13,6 +13,10 @@ import           Language.CuminToSalt.TypeChecker
 import           Language.CuminToSalt.Types
 import           Language.CuminToSalt.Util
 
+-- * Simplifications
+
+-- | Applies simplifications to a SaLT expression.
+-- In detail, these are the monad laws for sets, beta- and eta-reduction.
 simplifyExp :: forall v. Show v => VarEnv v -> SExp v -> SExp v
 simplifyExp varEnv e = case transformSubExpressions simplifyExp varEnv e of
   -- First monad law. This one is used all the time.
@@ -42,9 +46,11 @@ simplifyExp varEnv e = case transformSubExpressions simplifyExp varEnv e of
     k (B _) = Nothing
     k (F a) = Just a
 
+-- | Simplifies a binding by simplifying the bound expression.
 simplifyBinding :: VarEnv Void -> SBinding -> SBinding
 simplifyBinding varEnv = sBindExp %~ simplifyExp varEnv
 
+-- | Simplifies a module by simplifying each binding.
 simplifyModule :: SModule -> SModule
 simplifyModule m = m & modBinds %~ fmap (simplifyBinding initialVarEnv)
   where
@@ -53,8 +59,7 @@ simplifyModule m = m & modBinds %~ fmap (simplifyBinding initialVarEnv)
     (fmap (view sBindType) $ m^.modBinds)
     (m^.modADTs)
 
--- * Transform subexpressions
-
+-- | Applies a transformations to all sub-expressions.
 transformSubExpressions
   :: Show v
   => (forall w. Show w => VarEnv w -> SExp w -> SExp w)

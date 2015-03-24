@@ -10,6 +10,8 @@ import           Language.CuminToSalt.Renamer
 import           Language.CuminToSalt.Translation
 import qualified Language.SaLT.AST                  as S
 
+-- | Transform a CuMin module to an equivalent SaLT module.
+-- The boolean argument specifies whether the translated code is simplified.
 cuminToSalt :: Bool -> C.Module -> S.Module
 cuminToSalt simplify
   = evalRenamer
@@ -18,6 +20,8 @@ cuminToSalt simplify
   . cModToSMod
   . cuminModuleToInternal
 
+-- | Filter the prelude functions from a SaLT module.
+-- Useful since there already is a special prelude for SaLT code that arises from CuMin code.
 filterPrelude :: S.Module -> S.Module
 filterPrelude
   = (modBinds %~ (`M.difference` preludeBinds))

@@ -10,9 +10,7 @@ import           Bound
 import           Control.Applicative
 import           Control.Arrow (second)
 import           Control.Lens
-import           Data.Foldable                      (traverse_)
 import           Data.List                          (elemIndex)
-import qualified Data.Map                           as M
 import           Data.Maybe
 import qualified Data.Set                           as Set
 import           Debug.Trace.LocationTH
@@ -23,8 +21,10 @@ import           Language.CuminToSalt.TypeChecker
 import           Language.CuminToSalt.Types
 import           Language.CuminToSalt.Util
 import qualified Language.SaLT.AST                  as S
+
 -- * CuMin -> Internal CuMin Representation
 
+-- | Convert a CuMin expression to the internal nameless representation.
 cuminExpToInternal :: Set.Set VarName -> C.Exp -> CExp VarName
 cuminExpToInternal localVars = \case
   C.EVar v -> if v `Set.member` localVars then CEVar v else CEFun v []
@@ -38,11 +38,13 @@ cuminExpToInternal localVars = \case
   C.ECon c tys -> CECon c tys
   C.ECase e alts -> CECase (cuminExpToInternal localVars e) (map (cuminAltToInternal localVars) alts)
 
+-- | Translate a CuMin case alternative to the internal representation.
 cuminAltToInternal :: Set.Set VarName -> C.Alt -> Alt CExp VarName
 cuminAltToInternal localVars (C.Alt p e) = case p of
   PVar v -> AVarPat v (abstract1 v (cuminExpToInternal (Set.insert v localVars) e))
   PCon c vs -> AConPat c vs (abstract (`elemIndex` vs) (cuminExpToInternal (Set.fromList vs `Set.union` localVars) e))
 
+-- | Translate a CuMin function definition to the internal representation.
 cuminBindingToInternal :: C.Binding -> CBinding
 cuminBindingToInternal b = CBinding
   { _cBindName = b^.C.bindingName
@@ -57,11 +59,14 @@ cuminBindingToInternal b = CBinding
   boundExp = abstract (`elemIndex` bindArgs) $ cuminExpToInternal (Set.fromList bindArgs) $ b^.C.bindingExpr
   bindArgs = b^.C.bindingArgs
 
+-- | Translate a CuMin module to the internal representation.
 cuminModuleToInternal :: C.Module -> CModule
 cuminModuleToInternal = fmap cuminBindingToInternal
 
 -- * Internal CuMin Representation -> Internal SaLT Representation
+-- This is were the actual translation takes place.
 
+-- | Translate a CuMin expression to SaLT, in the internal representation.
 cExpToSExp :: Show v => VarEnv v -> CExp v -> SExp v
 cExpToSExp varEnv = \case
   CEVar v -> SESet (SEVar v)
@@ -116,6 +121,7 @@ cExpToSExp varEnv = \case
       [] -> SESet $ SEPrim oper (reverse fs)
       (ty,x):xs -> SESetBind x $ SELam "primOpArg" ty $ toScope $ go (return (B ()) : map (fmap F) fs) (map (second (fmap F)) xs)
 
+-- | Translate a CuMin binding to SaLT, in the internal representation.
 cBindToSBind :: VarEnv Void -> CBinding -> SBinding
 cBindToSBind varEnv b = SBinding
   { _sBindName = b^.cBindName
@@ -129,6 +135,7 @@ cBindToSBind varEnv b = SBinding
   where
   tyDecl@(TyDecl _ _ (TSet tySalt)) = translateTyDecl (b^.cBindType)
   (indexedTys, _) = extractSetArgs tySalt
+  -- | Create the set and lambda wrappers for a translated SaLT function: { \x -> { \y -> { ... } } }
   makeLambda :: Show v => [(Int, VarName, Type)] -> VarEnv v -> Scope Int CExp v -> SExp v
   makeLambda [] vars s = cExpToSExp vars ($checkTrace (show s) $ fromJust $ extractFromConstantScope s)
   makeLambda ((i, v, ty):tys) vars s
@@ -139,6 +146,7 @@ cBindToSBind varEnv b = SBinding
         vars
         (abstractInScope (\j -> if i == j then Just () else Nothing) s)
 
+-- | Translate a CuMin module to SaLT, in the internal representation.
 cModToSMod :: CModule -> SModule
 cModToSMod m = translateADTs $ cBindToSBind initialVarEnv <$> m
   where
@@ -147,19 +155,32 @@ cModToSMod m = translateADTs $ cBindToSBind initialVarEnv <$> m
     (fmap (translateTyDecl . view cBindType) $ m^.modBinds)
     (m^.modADTs)
 
+-- | Translate a CuMin type declaration to the corresponding declaration in SaLT.
 translateTyDecl :: TyDecl -> TyDecl
 translateTyDecl (TyDecl q c ty) = TyDecl q c (TSet (cTypeToSType ty))
 
+-- | Translate a CuMin type to the corresponding SaLT type required by the translation.
+cTypeToSType :: Type -> Type
+cTypeToSType = \case
+  TVar a -> TVar a
+  TFun s t -> TFun (cTypeToSType s) (TSet $ cTypeToSType t)
+  TCon c tys -> TCon c (map cTypeToSType tys)
+
+-- Translate an ADT from CuMin to SaLT.
 translateADTs :: CoreModule b -> CoreModule b
 translateADTs = modADTs %~ fmap cAdtToSAdt
-
-cAdtToSAdt :: ADT -> ADT
-cAdtToSAdt = adtConstr.each %~ translateConDecl
   where
-  translateConDecl (ConDecl c tys) = ConDecl c (map cTypeToSType tys)
+  cAdtToSAdt :: ADT -> ADT
+  cAdtToSAdt = adtConstr.each %~ translateConDecl
+    where
+    translateConDecl (ConDecl c tys) = ConDecl c (map cTypeToSType tys)
 
 -- * Internal SaLT Representation -> SaLT
+-- The translation from the internal nameless representation to SaLT
+-- uses the renamer to generate fresh names.
 
+-- | Translate the internal nameless SaLT expression to the actual SaLT expression type.
+-- This renames variables, making the names unique.
 internalToSalt :: VarEnv v -> SExp v -> Renamer S.Exp
 internalToSalt varEnv = \case
   SEVar v -> return . S.EVar $ _vName $ _localVar varEnv v
@@ -185,6 +206,7 @@ internalToSalt varEnv = \case
   SEFailed ty -> return $ S.EFailed ty
   SEUnknown ty -> return $ S.EUnknown ty
 
+-- | The same renaming for case alternatives.
 altToSalt :: VarEnv v -> Type -> Alt SExp v -> Renamer S.Alt
 altToSalt varEnv ty =
   enterAlt ty varEnv
@@ -204,6 +226,7 @@ altToSalt varEnv ty =
         return $ S.Alt (PCon c ws) e
     )
 
+-- | Translate the internal SaLT representation of top-level definitions to the regular one.
 internalToSaltBinding :: VarEnv Void -> SBinding -> Renamer S.Binding
 internalToSaltBinding varEnv b = fillBinding <$> internalToSalt varEnv (b^.sBindExp)
   where
@@ -214,10 +237,9 @@ internalToSaltBinding varEnv b = fillBinding <$> internalToSalt varEnv (b^.sBind
     , S._bindingSrc = b^.sBindSrc
     }
 
+-- | Translate the internal representation of SaLT modules to the regular one.
 internalToSaltModule :: SModule -> Renamer S.Module
-internalToSaltModule m = do
-  traverse_ addGlobal (M.keys $ m^.modBinds)
-  traverse (internalToSaltBinding initialVarEnv) m
+internalToSaltModule m = traverse (internalToSaltBinding initialVarEnv) m
   where
   initialVarEnv :: VarEnv Void
   initialVarEnv = makeInitialVarEnv

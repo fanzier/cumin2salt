@@ -12,6 +12,7 @@ import qualified Language.CuMin.AST         as C
 import           Language.CuminToSalt.Types
 import           Language.CuminToSalt.Util
 
+-- | Type checks a CuMin expression.
 tyCheckCExp :: VarEnv v -> CExp v -> Type
 tyCheckCExp varEnv = \case
   CEVar v -> _vType $ _localVar varEnv v
@@ -27,6 +28,8 @@ tyCheckCExp varEnv = \case
   CECon c tys -> $check . fromJust . instantiateTyDecl tys . conDeclToTyDecl $ lookupConstructor varEnv c
   CECase e alts -> let ty = tyCheckCExp varEnv e in reduceAlt tyCheckCExp ty varEnv (head alts)
 
+-- | Type checks a SaLT expression. Throws an error if it fails.
+-- This function is also used as a consistency check during translation.
 tyCheckSExp :: VarEnv v -> SExp v -> Type
 tyCheckSExp varEnv = \case
   SEVar v -> _vType $ _localVar varEnv v
