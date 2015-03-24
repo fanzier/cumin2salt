@@ -78,7 +78,7 @@ benchSub :: Nat
 benchSub = peanoToNat (minusP hundred ten)
 
 benchDiv :: Nat
-benchDiv = peanoToNat (let f :: Peano free in guard<:Peano:> (timesP two f == ten) f)
+benchDiv = peanoToNat (let f :: Peano free in guard<:Peano:> (timesP two f == hundred) f)
 
 {- LAST -}
 
