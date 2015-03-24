@@ -38,9 +38,9 @@ main = do
   let noOptMod = cuminToSalt False cuminModul
   let optMod = cuminToSalt True cuminModul
   defaultMain $ map (benchPerformance noOptMod optMod)
-    [ ("Add", [Salt.saltExp|benchAdd<::>|])
-    , ("Sub", [Salt.saltExp|benchSub<::>|])
-    , ("Div", [Salt.saltExp|benchDiv<::>|])
+    [ ("AddPeano", [Salt.saltExp|benchAdd<::>|])
+    , ("SubPeano", [Salt.saltExp|benchSub<::>|])
+    , ("DivPeano", [Salt.saltExp|benchDiv<::>|])
     , ("FibNat", [Salt.saltExp|benchFib<::>|])
     , ("Last", [Salt.saltExp|benchLast<::>|])
     , ("PermSort", [Salt.saltExp|benchSort<::>|])
@@ -52,12 +52,15 @@ main = do
     ]
 
 -- | Evaluates the SaLT expression and returns the first result.
+-- Only the first result without any bottoms is returned.
+-- Evaluation uses breadth-first search without pruning.
 saltEvaluateFirst :: Salt.Module -> Salt.Exp -> Result
 saltEvaluateFirst modul e = head $ mapMaybe saltToResult $ Search.observeAll $ ensureSet (SD.runEval (SD.eval e) modul SD.StepInfinity id :: SD.Value BFSMonad)
   where
   ensureSet (SD.VSet vs _) = vs
   ensureSet _ = error "result not a set"
 
+-- | Converts a SaLT Value to a Result if it contains no bottoms or partial function applications.
 saltToResult :: SD.Value n -> Maybe Result
 saltToResult = \case
   SD.VCon c vs _ -> Constructor c <$> traverse saltToResult vs
