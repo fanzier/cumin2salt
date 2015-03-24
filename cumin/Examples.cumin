@@ -1,5 +1,17 @@
 data DList a = DList (List a -> List a)
 
+loop :: forall a. a
+loop = loop<:a:>
+
+letTest1 :: Nat
+letTest1 = let x = let y = 1 + 1 in y + y in x + x
+
+letTest2 :: Nat
+letTest2 = let y = 1 + 1 in let x = y + y in x + x
+
+etaReductionIsUseful :: Nat
+etaReductionIsUseful = inc loop<:Nat:>
+
 tMap :: forall a b.(a -> b) -> Pair a a -> Pair b b
 tMap f x = case x of Pair a b -> Pair<:b,b:> (f a) (f b)
 
