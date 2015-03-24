@@ -1,3 +1,5 @@
+{- PRELUDE -}
+
 mapTest :: List Bool
 mapTest = map<:Bool,Bool:> not [True, False]<:Bool:>
 
@@ -6,3 +8,190 @@ andTest = and False failed<:Bool:>
 
 failedTest :: forall a. a
 failedTest = failed<:a:>
+
+{- COIN -}
+
+coin :: Nat
+coin = choose<:Nat:> 0 1
+
+double :: Nat -> Nat
+double x = x + x
+
+maybeDouble1 :: Nat -> Nat
+maybeDouble1 = choose<:Nat -> Nat:> id<:Nat:> double
+
+maybeDouble2 :: Nat -> Nat
+maybeDouble2 n = maybeDouble1 n
+
+testDoubleCoin :: Nat
+testDoubleCoin = double coin
+
+testCoinPlusCoin :: Nat
+testCoinPlusCoin = coin + coin
+
+testMaybeDouble1 :: List Nat
+testMaybeDouble1 = map<:Nat,Nat:> maybeDouble1 [1,3]<:Nat:>
+
+testMaybeDouble2 :: List Nat
+testMaybeDouble2 = map<:Nat,Nat:> maybeDouble2 [1,3]<:Nat:>
+
+{- PEANO NUMBERS -}
+
+data Peano = Z | S Peano
+
+one :: Peano
+one = S Z
+
+two :: Peano
+two = S (S Z)
+
+three :: Peano
+three = S (S (S Z))
+
+four :: Peano
+four = S (S (S (S Z)))
+
+five :: Peano
+five = S (S (S (S (S Z))))
+
+six :: Peano
+six = S (S (S (S (S (S Z)))))
+
+seven :: Peano
+seven = S (S (S (S (S (S (S Z))))))
+
+eight :: Peano
+eight = S (S (S (S (S (S (S (S Z)))))))
+
+nine :: Peano
+nine = S (S (S (S (S (S (S (S (S Z))))))))
+
+ten :: Peano
+ten = S (S (S (S (S (S (S (S (S (S Z)))))))))
+
+hundred :: Peano
+hundred = let t = ten in timesP t t
+
+thousand :: Peano
+thousand = timesP ten hundred
+
+ten4 :: Peano
+ten4 = let h = hundred in timesP h h
+
+plusP :: Peano -> Peano -> Peano
+plusP m n = case m of
+  Z -> n
+  S p -> S (plusP p n)
+
+minusP :: Peano -> Peano -> Peano
+minusP m n = let x :: Peano free in guard<:Peano:> (plusP n x == m) x
+
+timesP :: Peano -> Peano -> Peano
+timesP m n = case m of
+  Z -> Z
+  S p -> plusP n (timesP p n)
+
+peanoToNat :: Peano -> Nat
+peanoToNat n = case n of
+  Z -> 0
+  S p -> peanoToNat p + 1
+
+powP :: Peano -> Peano -> Peano
+powP m n = case n of
+  Z -> S Z
+  S n' -> timesP m (powP m n')
+
+leq :: Peano -> Peano -> Bool
+leq m n = case m of
+  Z -> True
+  S m' -> case n of
+    Z -> False
+    S n' -> leq m' n'
+
+testSub :: Peano
+testSub = minusP ten five
+
+testTimes :: Peano
+testTimes = timesP five five
+
+testDiv :: Peano
+testDiv = let x :: Peano free in guard<:Peano:> (timesP two x == six) x
+
+{- LAST -}
+
+append :: forall a. List a -> List a -> List a
+append xs ys = case xs of
+  Nil -> ys
+  Cons x xs -> Cons<:a:> x (append<:a:> xs ys)
+
+last :: forall a. Data a => List a -> a
+last list =
+  let e:: a free in
+  let init :: List a free in
+  guard<:a:> (append<:a:> init (Cons<:a:> e Nil<:a:>) == list) e
+
+testLast :: Bool
+testLast = last<:Bool:> [True, False, True]<:Bool:>
+
+{- PERMUTATION SORT -}
+
+sorted :: List Peano -> Bool
+sorted list = case list of
+  Nil -> True
+  Cons x xss -> case xss of
+    Nil -> True
+    Cons y xs -> and (leq x y) (sorted xss)
+
+insert :: forall a. a -> List a -> List a
+insert x list = case list of
+  Nil -> Cons<:a:> x Nil<:a:>
+  Cons first rest -> choose<:List a:>
+    (Cons<:a:> x list)
+    (Cons<:a:> first (insert<:a:> x rest))
+
+permute :: forall a. List a -> List a
+permute list = case list of
+  Nil -> Nil<:a:>
+  Cons first rest -> insert<:a:> first (permute<:a:> rest)
+
+sort :: List Peano -> List Peano
+sort list = let l = permute<:Peano:> list
+  in guard<:List Peano:> (sorted l) l
+
+testSort :: List Peano
+testSort = sort [five, six, Z, one, two]<:Peano:>
+
+{- NAT -}
+
+minus :: Nat -> Nat -> Nat
+minus m n = let x :: Nat free in case n + x == m of
+  True -> x
+  False -> failed<:Nat:>
+
+times :: Nat -> Nat -> Nat
+times m n = case m == 0 of
+  True -> 0
+  False -> n + times (minus m 1) n
+
+minusTest :: Nat
+minusTest = minus 10 5
+
+timesTest :: Nat
+timesTest = times 2 2
+
+{- MISC -}
+
+caseFailure :: forall a.List a -> List a
+caseFailure x = case x of { Nil -> failed<:List a:>; y -> y }
+
+caseTest1 :: List Nat
+caseTest1 = caseFailure<:Nat:> failed<:List Nat:>
+
+caseTest2 :: List Nat
+caseTest2 = caseFailure<:Nat:> []<:Nat:>
+
+caseTest3 :: List Nat
+caseTest3 = caseFailure<:Nat:> [1]<:Nat:>
+
+letTest :: Nat
+letTest = let x = 1 in let x = 0 in x

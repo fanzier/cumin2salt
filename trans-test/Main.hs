@@ -1,10 +1,10 @@
 {-# LANGUAGE LambdaCase  #-}
-{-# LANGUAGE QuasiQuotes #-}
 module Main where
 
 import           Control.Applicative
 import qualified Control.Monad.Logic                   as Logic
 import           Data.Default.Class
+import           Data.Function
 import qualified Data.Map                              as M
 import           Data.Maybe                            (mapMaybe)
 import           Data.Traversable
@@ -40,29 +40,58 @@ spec =
     let saltModul2 = cuminToSalt False cuminModul
     mapM_ (testEquiv cuminModul) [("unoptimized code", saltModul1), ("optimized code", saltModul2)]
   where
-  testEquiv cuminModul (descr, saltModul) = describe descr $ do
-    it "mapTest" $ shouldEvaluateToSame (cuminModul, [Cumin.cuminExp|mapTest<::>|]) (saltModul, [Salt.saltExp|mapTest<::>|])
-    it "andTest" $ shouldEvaluateToSame (cuminModul, [Cumin.cuminExp|andTest<::>|]) (saltModul, [Salt.saltExp|andTest<::>|])
-    it "failedTest" $ shouldEvaluateToSame (cuminModul, [Cumin.cuminExp|failedTest<::>|]) (saltModul, [Salt.saltExp|failedTest<::>|])
+  testEquiv cuminModul (descr, saltModul) = describe descr $
+    mapM_ shouldBeEquivalent
+      [ ("mapTest", shouldBe)
+      , ("andTest", shouldBe)
+      , ("failedTest", shouldBe)
 
-shouldEvaluateToSame :: (Cumin.Module, Cumin.Exp) -> (Salt.Module, Salt.Exp) -> Expectation
-shouldEvaluateToSame (cm, ce) (sm, se) = cuminEvaluate cm ce `shouldBe` saltEvaluate sm se
+      , ("testDoubleCoin", shouldBe)
+      , ("testCoinPlusCoin", shouldBe)
+      , ("testMaybeDouble1", shouldBe)
+      , ("testMaybeDouble2", shouldBe)
 
+      , ("testSub", shouldBe `on` head)
+      , ("testTimes", shouldBe `on` head)
+      , ("testDiv", shouldBe `on` head)
+
+      , ("testLast", shouldBe `on` head)
+      , ("testSort", shouldBe `on` head)
+
+      , ("minusTest", shouldBe `on` head)
+      , ("timesTest", shouldBe `on` head)
+
+      , ("caseTest1", shouldBe)
+      , ("caseTest2", shouldBe)
+      , ("caseTest3", shouldBe)
+      , ("letTest", shouldBe)
+      ]
+    where
+    -- | Checks whether a given function gives equivalent results with respect to a given condition.
+    shouldBeEquivalent :: (String, [Result] -> [Result] -> Expectation) -> Spec
+    shouldBeEquivalent (function, condition) = it function $ condition
+      (cuminEvaluate cuminModul (Cumin.EFun function []))
+      (saltEvaluate saltModul (Salt.EFun function []))
+
+-- | Evaluate a CuMin expression in the context of a module to a list of results.
 cuminEvaluate :: Cumin.Module -> Cumin.Exp -> [Result]
 cuminEvaluate modul e = mapMaybe cuminToResult $ Search.observeAll (CD.runEval (CD.eval e) modul CD.StepInfinity id :: BFSMonad (CD.Value BFSMonad))
 
+-- | Evaluate a SaLT expression in the context of a module to a list of results.
 saltEvaluate :: Salt.Module -> Salt.Exp -> [Result]
 saltEvaluate modul e = mapMaybe saltToResult $ Search.observeAll $ ensureSet (SD.runEval (SD.eval e) modul SD.StepInfinity id :: SD.Value BFSMonad)
   where
   ensureSet (SD.VSet vs _) = vs
   ensureSet _ = error "result not a set"
 
+-- | Converts a CuMin Value to a Result if it contains no bottoms or partial function applications.
 cuminToResult :: CD.Value n -> Maybe Result
 cuminToResult = \case
   CD.VCon c vs _ -> Constructor c <$> traverse cuminToResult vs
   CD.VNat i -> Just $ Literal i
   _ -> Nothing
 
+-- | Converts a SaLT Value to a Result if it contains no bottoms or partial function applications.
 saltToResult :: SD.Value n -> Maybe Result
 saltToResult = \case
   SD.VCon c vs _ -> Constructor c <$> traverse saltToResult vs
