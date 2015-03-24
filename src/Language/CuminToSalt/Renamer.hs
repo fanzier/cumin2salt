@@ -7,6 +7,9 @@ import qualified Data.Map as M
 
 -- * The renamer makes sure that variable names do not clash
 -- by appending a unique number (ID) to them.
+-- During renaming, we do not have to worry about global functions
+-- since they are marked by "<::>" in the output,
+-- so they cannot be confused with local variables.
 
 -- | The state of the renamer.
 -- The unique counter is for generation of fresh variables.
@@ -61,8 +64,11 @@ resolveName :: (Functor m, Monad m) => String -> RenamerT String m (Maybe String
 resolveName v = fmap (makeVar v) <$> resolve v
 
 -- | Construct a unique name by appending the ID to the variable name.
+-- An underscore is inserted to prevent digits from running together.
+-- Otherwise, a variable "x2" should not be renamed to "x23",
+-- which may already be the renamed variant of a variable "x".
 makeVar :: String -> Int -> String
-makeVar v i = v ++ show i
+makeVar v i = v ++ "_" ++ show i
 
 -- | Generate a fresh ID by increasing the counter.
 fresh :: Monad m => RenamerT v m Int
