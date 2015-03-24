@@ -103,6 +103,8 @@ cExpToSExp varEnv = \case
       alts' = map (transformAlt cExpToSExp ty varEnv) alts
     in SESetBind e' $ SELam "scrutinee" ty $ Scope $ SECase (return (B ())) (map (fmap (F . return)) alts')
   where
+  -- | Constructs a lambda abstraction for a constructor C:
+  -- { \x -> { \y ->  ... { C x y ... } ... } }
   makeConstructorLambda :: Show v => VarName -> [Type] -> SExp v
   makeConstructorLambda c tyInsts =
     let
@@ -114,6 +116,7 @@ cExpToSExp varEnv = \case
       scope e [] = SESet e
       scope e (t:ts) = SESet . SELam "conArg" t $ Scope (scope (SEApp (F . return <$> e) (return (B ()))) ts)
     in scope (SECon c tyInsts) tys
+  -- | Given arguments of a primitive operation (+, ==), construct the translated SaLT expression.
   makePrimExp :: Show v => [(Type, SExp v)] -> C.PrimOp -> SExp v
   makePrimExp exps oper = go [] exps
     where
