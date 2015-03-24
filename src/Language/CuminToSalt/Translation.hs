@@ -77,10 +77,11 @@ cExpToSExp varEnv = \case
       s' = transformScope cExpToSExp (const $ VarInfo v ty) varEnv s
     in SESetBind x' (SELam v ty s')
   CELetFree v ty s ->
-    let s' = transformScope cExpToSExp (const $ VarInfo v ty) varEnv s
-    in SESetBind (SEUnknown ty) (SELam v ty s')
-  CEFailed ty -> SESet (SEFailed ty)
-  CEFun v tys -> SEFun v tys
+    let ty' = cTypeToSType ty
+        s' = transformScope cExpToSExp (const $ VarInfo v ty') varEnv s
+    in SESetBind (SEUnknown ty') (SELam v ty' s')
+  CEFailed ty -> SESet (SEFailed (cTypeToSType ty))
+  CEFun v tys -> SEFun v (map cTypeToSType tys)
   CEApp x y ->
     let
       x' = cExpToSExp varEnv x
