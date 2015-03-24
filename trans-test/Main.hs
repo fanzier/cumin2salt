@@ -36,10 +36,13 @@ spec :: Spec
 spec =
   describe "CuMin/SaLT equivalence tests" $ do
     Just cuminModul <- runIO $ checkFile "cumin/TestCases.cumin"
-    let saltModul1 = cuminToSalt True cuminModul
-    let saltModul2 = cuminToSalt False cuminModul
+    let saltModul1 = typeCheckSaltModule $ cuminToSalt True cuminModul
+    let saltModul2 = typeCheckSaltModule $ cuminToSalt False cuminModul
     mapM_ (testEquiv cuminModul) [("unoptimized code", saltModul1), ("optimized code", saltModul2)]
   where
+  typeCheckSaltModule modul = case Salt.evalTC (Salt.checkModule modul) def def of
+    Left msg -> error $ show (PP.pretty msg)
+    Right () -> modul
   testEquiv cuminModul (descr, saltModul) = describe descr $
     mapM_ shouldBeEquivalent
       [ ("mapTest", shouldBe)
