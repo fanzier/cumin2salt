@@ -61,7 +61,7 @@ executable cumin2salt
   hs-source-dirs:      cumin2salt
   default-language:    Haskell2010
 
-test-suite trans-test
+executable trans-test
   main-is: Main.hs
   ghc-options: -Wall -O2
   build-depends:       base               == 4.7.*
@@ -83,7 +83,6 @@ test-suite trans-test
                      , logict             ==0.6.*
   hs-source-dirs:      trans-test
   default-language:    Haskell2010
-  type:                exitcode-stdio-1.0
 
 executable opt-bench
   main-is: Main.hs
