@@ -41,7 +41,6 @@ main = do
     [ ("AddPeano", [Salt.saltExp|benchAdd<::>|])
     , ("SubPeano", [Salt.saltExp|benchSub<::>|])
     , ("DivPeano", [Salt.saltExp|benchDiv<::>|])
-    , ("FibNat", [Salt.saltExp|benchFib<::>|])
     , ("Last", [Salt.saltExp|benchLast<::>|])
     , ("PermSort", [Salt.saltExp|benchSort<::>|])
     ]
